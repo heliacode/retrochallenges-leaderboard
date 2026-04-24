@@ -13,6 +13,12 @@ coverage/
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # Prisma
 prisma/migrations/dev.db
 prisma/migrations/dev.db-journal
