@@ -10,10 +10,9 @@ const nextConfig = {
       { protocol: 'https', hostname: 'lh6.googleusercontent.com' },
     ],
   },
-  experimental: {
-    // Avoid bundling Prisma's generated client.
-    serverComponentsExternalPackages: ['@prisma/client', 'prisma'],
-  },
+  // Avoid bundling Prisma's generated client. Renamed out of `experimental`
+  // in Next 15; the old key logs a warning but still works.
+  serverExternalPackages: ['@prisma/client', 'prisma'],
 };
 
 export default nextConfig;
