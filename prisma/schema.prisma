@@ -1,0 +1,62 @@
+// RetroChallenges leaderboard — read-only public site, submissions from
+// the desktop app only. Trust-based: moderators hide rows with hiddenAt.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String    @id @default(uuid())
+  // Google OAuth stable identifier (the `id` / `sub` claim). Our one and
+  // only user-identity anchor; email + name + picture are all mutable.
+  googleSub  String    @unique
+  email      String
+  name       String
+  pictureUrl String?
+  createdAt  DateTime  @default(now())
+  // Soft-ban. Banned users' runs are hidden from public leaderboards even
+  // if individual runs aren't marked hiddenAt.
+  bannedAt   DateTime?
+
+  runs Run[]
+
+  @@index([createdAt])
+}
+
+model Run {
+  id                   String   @id @default(uuid())
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId               String
+
+  // Challenge coordinates — matches the shape the desktop app writes
+  // into challenge_data.json via RC.report_completion.
+  game                 String
+  challengeName        String
+
+  // Optional metrics. Different challenges emit different combinations
+  // (score-target challenges emit score; speedruns emit completionTime).
+  score                Int?
+  completionTimeFrames Int?
+
+  clientReportedAt     DateTime?
+  serverReceivedAt     DateTime @default(now())
+
+  // Moderation: hidden rows stay in the DB (for audit) but don't appear
+  // in public queries.
+  hiddenAt             DateTime?
+  hiddenReason         String?
+
+  // Full original payload, kept for debugging and future replay support.
+  rawPayload           Json
+
+  // Composite index supports "top N for this challenge" queries.
+  // Tie-break rule: higher score wins; if tied, faster completion wins.
+  @@index([game, challengeName, score(sort: Desc), completionTimeFrames(sort: Asc)])
+  @@index([userId, serverReceivedAt(sort: Desc)])
+  @@index([hiddenAt])
+}
