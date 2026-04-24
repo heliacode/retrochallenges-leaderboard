@@ -9,6 +9,10 @@ out/
 .vscode/
 coverage/
 
+# TypeScript incremental-build cache
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
 # Prisma
 prisma/migrations/dev.db
 prisma/migrations/dev.db-journal
