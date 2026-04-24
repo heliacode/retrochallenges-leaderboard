@@ -1,6 +1,6 @@
 # RetroChallenges Leaderboard
 
-Public, read-only leaderboard site for the [RetroChallenges](https://github.com/TheHotWinter/RetroChallenges) desktop app. Every row is a completion that the desktop app's Lua runtime detected in-emulator and POSTed from the user's signed-in Google identity.
+Public, read-only leaderboard site for the [RetroChallenges](https://github.com/heliacode/RetroChallenges) desktop app. Every row is a completion that the desktop app's Lua runtime detected in-emulator and POSTed from the user's signed-in Google identity.
 
 ## Stack
 
