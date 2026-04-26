@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { verifySubmissionSecret } from '@/lib/auth';
-import { isBetterRun } from '@/lib/leaderboard';
+import { isBetterRun, getChallengeLeaderboard, challengeHref } from '@/lib/leaderboard';
+import { notifyDiscordTopPlacement } from '@/lib/discord';
 
 // Runtime schema for the submission payload. Matches the shape written
 // by RC.report_completion + the caller-supplied user identity pulled
@@ -108,6 +109,30 @@ export async function POST(req: NextRequest) {
       { score: run.score, completionTimeFrames: run.completionTimeFrames },
       priorBestRow,
     );
+
+    // If the new run lands in the top 3 for the challenge, fire a
+    // Discord webhook (fire-and-forget; won't delay the API response,
+    // never blocks the success path).
+    void (async () => {
+      try {
+        const top3 = await getChallengeLeaderboard(s.game, s.challengeName, 3);
+        const idx = top3.findIndex((entry) => entry.runId === run.id);
+        if (idx === -1) return;  // not top 3, nothing to celebrate
+        const origin = req.nextUrl.origin;
+        await notifyDiscordTopPlacement({
+          rank: idx + 1,
+          playerName: user.name,
+          playerAvatarUrl: user.pictureUrl,
+          game: s.game,
+          challengeName: s.challengeName,
+          score: run.score,
+          completionTimeFrames: run.completionTimeFrames,
+          publicHref: `${origin}${challengeHref(s.game, s.challengeName)}`,
+        });
+      } catch (err) {
+        console.error('top-placement notification failed:', err);
+      }
+    })();
 
     return NextResponse.json(
       {
