@@ -193,6 +193,111 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// User profile data
+// ---------------------------------------------------------------------------
+export interface UserProfile {
+  userId: string;
+  name: string;
+  pictureUrl: string | null;
+  createdAt: Date;
+  totalRuns: number;
+  challenges: UserProfileChallenge[];
+}
+
+// One row per (game, challengeName) the user has runs on.
+export interface UserProfileChallenge {
+  game: string;
+  challengeName: string;
+  attempts: number;
+  bestRun: {
+    runId: string;
+    score: number | null;
+    completionTimeFrames: number | null;
+    serverReceivedAt: Date;
+  };
+  rank: number | null;   // null if we couldn't determine; otherwise 1-based
+}
+
+// Build a UserProfile for /u/<userId>. Rank is computed by counting how many
+// users have a strictly-better best on the same challenge — cheap at our
+// scale (single-digit challenges, low triple-digit users), revisit if either
+// climbs by an order of magnitude.
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, pictureUrl: true, createdAt: true, bannedAt: true },
+  });
+  if (!user || user.bannedAt) return null;
+
+  const userRuns = await prisma.run.findMany({
+    where: { userId, hiddenAt: null },
+    orderBy: [
+      { score: { sort: 'desc', nulls: 'last' } },
+      { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+    ],
+    select: {
+      id: true,
+      game: true,
+      challengeName: true,
+      score: true,
+      completionTimeFrames: true,
+      serverReceivedAt: true,
+    },
+  });
+
+  // Collapse to one row per (game, challengeName) — the first occurrence
+  // is already the user's best because the orderBy mirrors the leaderboard
+  // sort. Count attempts per challenge for the secondary stat.
+  const byChallenge = new Map<string, { best: typeof userRuns[number]; attempts: number }>();
+  for (const r of userRuns) {
+    const key = `${r.game}::${r.challengeName}`;
+    const existing = byChallenge.get(key);
+    if (!existing) {
+      byChallenge.set(key, { best: r, attempts: 1 });
+    } else {
+      existing.attempts += 1;
+    }
+  }
+
+  const challenges: UserProfileChallenge[] = await Promise.all(
+    Array.from(byChallenge.values()).map(async ({ best, attempts }) => {
+      const top = await getChallengeLeaderboard(best.game, best.challengeName, 100);
+      const idx = top.findIndex((entry) => entry.userId === userId);
+      return {
+        game: best.game,
+        challengeName: best.challengeName,
+        attempts,
+        bestRun: {
+          runId: best.id,
+          score: best.score,
+          completionTimeFrames: best.completionTimeFrames,
+          serverReceivedAt: best.serverReceivedAt,
+        },
+        rank: idx >= 0 ? idx + 1 : null,
+      };
+    }),
+  );
+
+  challenges.sort((a, b) => {
+    if (a.game !== b.game) return a.game.localeCompare(b.game);
+    return a.challengeName.localeCompare(b.challengeName);
+  });
+
+  return {
+    userId: user.id,
+    name: user.name,
+    pictureUrl: user.pictureUrl,
+    createdAt: user.createdAt,
+    totalRuns: userRuns.length,
+    challenges,
+  };
+}
+
+export function userProfileHref(userId: string): string {
+  return `/u/${encodeURIComponent(userId)}`;
+}
+
 // Compare two run metric pairs using the same rule the leaderboard uses
 // for sorting: higher score wins; on a score tie (or both score-less),
 // lower completionTimeFrames wins. Returns true when `a` is strictly
