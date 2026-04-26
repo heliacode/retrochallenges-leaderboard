@@ -4,6 +4,7 @@ import {
   getChallengeLeaderboard,
   formatFrames,
   parseLeaderboardWindow,
+  userProfileHref,
   type LeaderboardWindow,
 } from '@/lib/leaderboard';
 
@@ -55,7 +56,10 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
                 <tr key={e.runId} className="border-b border-slate-800">
                   <td className="py-2 pr-2 text-slate-500 font-mono">{e.rank}</td>
                   <td className="py-2 pr-2">
-                    <div className="flex items-center gap-2">
+                    <Link
+                      href={userProfileHref(e.userId)}
+                      className="flex items-center gap-2 group"
+                    >
                       {e.userPictureUrl ? (
                         <Image
                           src={e.userPictureUrl}
@@ -67,8 +71,8 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
                       ) : (
                         <div className="w-6 h-6 rounded-full bg-slate-700" aria-hidden="true" />
                       )}
-                      <span className="text-slate-200">{e.userName}</span>
-                    </div>
+                      <span className="text-slate-200 group-hover:text-indigo-300">{e.userName}</span>
+                    </Link>
                   </td>
                   <td className="py-2 pr-2 text-right font-mono text-slate-200">
                     {e.score != null ? e.score.toLocaleString() : '—'}

@@ -7,6 +7,7 @@ import {
   getOverallStats,
   getRecentRuns,
   listChallengeSummaries,
+  userProfileHref,
   type ChallengeSummary,
   type RecentRunEntry,
 } from '@/lib/leaderboard';
@@ -136,6 +137,10 @@ function ChallengeCard({ summary }: { summary: ChallengeSummary }) {
           ) : (
             <div className="w-5 h-5 rounded-full bg-slate-700" aria-hidden="true" />
           )}
+          {/* Username inside the card-Link can't be its own Link in valid
+              HTML, so we keep it as plain text here. The whole card already
+              navigates to the challenge; the dedicated profile path is via
+              the username column on the per-challenge leaderboard table. */}
           <span className="text-slate-200 truncate flex-1">{top.userName}</span>
           <span className="font-mono text-slate-300 tabular-nums">
             {formatTopMetric(top.score, top.completionTimeFrames)}
@@ -176,7 +181,12 @@ function RecentActivity({ runs }: { runs: RecentRunEntry[] }) {
             )}
             <div className="min-w-0 flex-1">
               <div className="text-slate-200 truncate">
-                <span className="font-medium">{r.userName}</span>
+                <Link
+                  href={userProfileHref(r.userId)}
+                  className="font-medium hover:text-indigo-300"
+                >
+                  {r.userName}
+                </Link>
                 <span className="text-slate-500"> finished </span>
                 <Link
                   href={challengeHref(r.game, r.challengeName)}
