@@ -103,6 +103,112 @@ export async function listChallengesWithRuns() {
   }));
 }
 
+// Same shape as listChallengesWithRuns plus the rank-1 row inline, so the
+// home page can preview each challenge's leader without a click.
+export interface ChallengeSummary {
+  game: string;
+  challengeName: string;
+  runCount: number;
+  topRun: LeaderboardEntry | null;
+}
+
+export async function listChallengeSummaries(): Promise<ChallengeSummary[]> {
+  const groups = await prisma.run.groupBy({
+    by: ['game', 'challengeName'],
+    where: { hiddenAt: null, user: { bannedAt: null } },
+    _count: { _all: true },
+    orderBy: [{ game: 'asc' }, { challengeName: 'asc' }],
+  });
+  // N+1 with N small (one query per challenge for its rank-1 row). Fine
+  // at our scale (single-digit challenges); revisit with a single window
+  // function query if the catalog grows beyond ~50.
+  return Promise.all(
+    groups.map(async (g) => {
+      const top = await getChallengeLeaderboard(g.game, g.challengeName, 1);
+      return {
+        game: g.game,
+        challengeName: g.challengeName,
+        runCount: g._count._all,
+        topRun: top[0] ?? null,
+      };
+    }),
+  );
+}
+
+// Top-of-page totals for the home page.
+export async function getOverallStats(): Promise<{
+  totalRuns: number;
+  totalPlayers: number;
+  totalChallenges: number;
+}> {
+  const [totalRuns, totalPlayers, challengeGroups] = await Promise.all([
+    prisma.run.count({ where: { hiddenAt: null, user: { bannedAt: null } } }),
+    prisma.user.count({ where: { bannedAt: null, runs: { some: { hiddenAt: null } } } }),
+    prisma.run.groupBy({
+      by: ['game', 'challengeName'],
+      where: { hiddenAt: null, user: { bannedAt: null } },
+    }),
+  ]);
+  return { totalRuns, totalPlayers, totalChallenges: challengeGroups.length };
+}
+
+// Most recent submissions across all challenges, for the activity feed.
+export interface RecentRunEntry {
+  runId: string;
+  game: string;
+  challengeName: string;
+  score: number | null;
+  completionTimeFrames: number | null;
+  serverReceivedAt: Date;
+  userId: string;
+  userName: string;
+  userPictureUrl: string | null;
+}
+
+export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
+  const rows = await prisma.run.findMany({
+    where: { hiddenAt: null, user: { bannedAt: null } },
+    orderBy: { serverReceivedAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      game: true,
+      challengeName: true,
+      score: true,
+      completionTimeFrames: true,
+      serverReceivedAt: true,
+      user: { select: { id: true, name: true, pictureUrl: true } },
+    },
+  });
+  return rows.map((r) => ({
+    runId: r.id,
+    game: r.game,
+    challengeName: r.challengeName,
+    score: r.score,
+    completionTimeFrames: r.completionTimeFrames,
+    serverReceivedAt: r.serverReceivedAt,
+    userId: r.user.id,
+    userName: r.user.name,
+    userPictureUrl: r.user.pictureUrl,
+  }));
+}
+
+// Rough relative-time string ("12m ago") for activity feed entries.
+// We avoid pulling in a date lib for one helper.
+export function formatRelative(date: Date, now: Date = new Date()): string {
+  const ms = now.getTime() - date.getTime();
+  const s = Math.floor(ms / 1000);
+  if (s < 5)        return 'just now';
+  if (s < 60)       return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60)       return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24)       return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30)       return `${d}d ago`;
+  return date.toLocaleDateString();
+}
+
 // mm:ss.mmm from a frame count, assuming 60 fps (NES). Mirrors the
 // formatter the desktop-app completion card uses so the same run reads
 // the same everywhere.
