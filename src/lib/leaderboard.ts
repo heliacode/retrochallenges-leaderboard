@@ -193,6 +193,23 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
   }));
 }
 
+// Compare two run metric pairs using the same rule the leaderboard uses
+// for sorting: higher score wins; on a score tie (or both score-less),
+// lower completionTimeFrames wins. Returns true when `a` is strictly
+// better than `b`. Exposed so it's testable.
+export interface RunMetric {
+  score: number | null;
+  completionTimeFrames: number | null;
+}
+export function isBetterRun(a: RunMetric, b: RunMetric): boolean {
+  const as = a.score ?? -Infinity;
+  const bs = b.score ?? -Infinity;
+  if (as !== bs) return as > bs;
+  const at = a.completionTimeFrames ?? Infinity;
+  const bt = b.completionTimeFrames ?? Infinity;
+  return at < bt;
+}
+
 // Rough relative-time string ("12m ago") for activity feed entries.
 // We avoid pulling in a date lib for one helper.
 export function formatRelative(date: Date, now: Date = new Date()): string {

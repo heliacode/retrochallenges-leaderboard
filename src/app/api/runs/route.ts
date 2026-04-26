@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { verifySubmissionSecret } from '@/lib/auth';
+import { isBetterRun } from '@/lib/leaderboard';
 
 // Runtime schema for the submission payload. Matches the shape written
 // by RC.report_completion + the caller-supplied user identity pulled
@@ -73,6 +74,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Look up the user's previous best on this challenge BEFORE the
+    // insert so the new run isn't compared against itself. Same sort
+    // order the public leaderboard uses.
+    const priorBestRow = await prisma.run.findFirst({
+      where: {
+        userId: user.id,
+        game: s.game,
+        challengeName: s.challengeName,
+        hiddenAt: null,
+      },
+      orderBy: [
+        { score: { sort: 'desc', nulls: 'last' } },
+        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+      ],
+      select: { score: true, completionTimeFrames: true },
+    });
+
     const run = await prisma.run.create({
       data: {
         userId: user.id,
@@ -85,7 +103,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ok: true, runId: run.id }, { status: 201 });
+    // First-ever run for this (user, challenge) is always a personal best.
+    const personalBest = !priorBestRow || isBetterRun(
+      { score: run.score, completionTimeFrames: run.completionTimeFrames },
+      priorBestRow,
+    );
+
+    return NextResponse.json(
+      {
+        ok: true,
+        runId: run.id,
+        personalBest,
+        previousBest: priorBestRow,
+      },
+      { status: 201 },
+    );
   } catch (err) {
     console.error('Failed to record run:', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

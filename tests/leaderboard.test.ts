@@ -1,4 +1,10 @@
-import { formatFrames, challengeHref, parseLeaderboardWindow, windowSince } from '../src/lib/leaderboard';
+import {
+  formatFrames,
+  challengeHref,
+  parseLeaderboardWindow,
+  windowSince,
+  isBetterRun,
+} from '../src/lib/leaderboard';
 
 describe('formatFrames', () => {
   test('returns em-dash for null', () => {
@@ -49,6 +55,35 @@ describe('parseLeaderboardWindow', () => {
     expect(parseLeaderboardWindow(null)).toBe('all');
     expect(parseLeaderboardWindow('')).toBe('all');
     expect(parseLeaderboardWindow('forever')).toBe('all');
+  });
+});
+
+describe('isBetterRun', () => {
+  test('higher score is better', () => {
+    expect(isBetterRun({ score: 5900, completionTimeFrames: 100 },
+                       { score: 5000, completionTimeFrames: 50 })).toBe(true);
+  });
+  test('on score tie, faster time is better', () => {
+    expect(isBetterRun({ score: 5000, completionTimeFrames: 50 },
+                       { score: 5000, completionTimeFrames: 100 })).toBe(true);
+  });
+  test('on score tie, slower time is not better', () => {
+    expect(isBetterRun({ score: 5000, completionTimeFrames: 200 },
+                       { score: 5000, completionTimeFrames: 100 })).toBe(false);
+  });
+  test('any score beats null score', () => {
+    expect(isBetterRun({ score: 1, completionTimeFrames: null },
+                       { score: null, completionTimeFrames: 5 })).toBe(true);
+    expect(isBetterRun({ score: null, completionTimeFrames: 5 },
+                       { score: 1, completionTimeFrames: null })).toBe(false);
+  });
+  test('time-only challenges: faster wins', () => {
+    expect(isBetterRun({ score: null, completionTimeFrames: 100 },
+                       { score: null, completionTimeFrames: 200 })).toBe(true);
+  });
+  test('exact tie is not strictly better', () => {
+    expect(isBetterRun({ score: 5000, completionTimeFrames: 100 },
+                       { score: 5000, completionTimeFrames: 100 })).toBe(false);
   });
 });
 
