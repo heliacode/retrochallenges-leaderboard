@@ -11,7 +11,28 @@ export interface LeaderboardEntry {
   serverReceivedAt: Date;
 }
 
-// Top N rows for a (game, challenge) tuple. Ordering:
+// Time-window keys for the daily / weekly / all-time leaderboard tabs.
+export type LeaderboardWindow = 'daily' | 'weekly' | 'all';
+
+const WINDOW_KEYS: readonly LeaderboardWindow[] = ['daily', 'weekly', 'all'];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Validate an arbitrary string (e.g. from a URL query param) into a
+// LeaderboardWindow, defaulting to 'all' if it isn't one of the known keys.
+export function parseLeaderboardWindow(value: string | undefined | null): LeaderboardWindow {
+  return WINDOW_KEYS.includes(value as LeaderboardWindow) ? (value as LeaderboardWindow) : 'all';
+}
+
+// Cutoff date for the supplied window. 'all' returns null (no cutoff).
+// Exposed so tests / debugging can reason about it.
+export function windowSince(window: LeaderboardWindow, now: Date = new Date()): Date | null {
+  if (window === 'daily') return new Date(now.getTime() - 1 * DAY_MS);
+  if (window === 'weekly') return new Date(now.getTime() - 7 * DAY_MS);
+  return null;
+}
+
+// Top N rows for a (game, challenge) tuple within an optional time window.
+// Ordering:
 //   1. score DESC (nulls last)   — higher score wins
 //   2. completionTimeFrames ASC  — faster wins ties (and is the primary
 //                                  axis for challenges that have no score)
@@ -20,13 +41,16 @@ export async function getChallengeLeaderboard(
   game: string,
   challengeName: string,
   limit = 50,
+  window: LeaderboardWindow = 'all',
 ): Promise<LeaderboardEntry[]> {
+  const since = windowSince(window);
   const rows = await prisma.run.findMany({
     where: {
       game,
       challengeName,
       hiddenAt: null,
       user: { bannedAt: null },
+      ...(since ? { serverReceivedAt: { gte: since } } : {}),
     },
     orderBy: [
       { score: { sort: 'desc', nulls: 'last' } },
