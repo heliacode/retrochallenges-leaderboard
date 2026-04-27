@@ -2,6 +2,7 @@ import {
   formatFrames,
   challengeHref,
   parseLeaderboardWindow,
+  parseLeaderboardView,
   windowSince,
   isBetterRun,
 } from '../src/lib/leaderboard';
@@ -55,6 +56,19 @@ describe('parseLeaderboardWindow', () => {
     expect(parseLeaderboardWindow(null)).toBe('all');
     expect(parseLeaderboardWindow('')).toBe('all');
     expect(parseLeaderboardWindow('forever')).toBe('all');
+  });
+});
+
+describe('parseLeaderboardView', () => {
+  test('passes through valid view keys', () => {
+    expect(parseLeaderboardView('best')).toBe('best');
+    expect(parseLeaderboardView('all')).toBe('all');
+  });
+  test('falls back to "best" for unknown / missing values', () => {
+    expect(parseLeaderboardView(undefined)).toBe('best');
+    expect(parseLeaderboardView(null)).toBe('best');
+    expect(parseLeaderboardView('')).toBe('best');
+    expect(parseLeaderboardView('weekly')).toBe('best');
   });
 });
 
