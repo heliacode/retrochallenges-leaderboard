@@ -4,15 +4,17 @@ import {
   getChallengeLeaderboard,
   formatFrames,
   parseLeaderboardWindow,
+  parseLeaderboardView,
   userProfileHref,
   type LeaderboardWindow,
+  type LeaderboardView,
 } from '@/lib/leaderboard';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ game: string; challenge: string }>;
-  searchParams: Promise<{ window?: string }>;
+  searchParams: Promise<{ window?: string; view?: string }>;
 }
 
 export default async function ChallengeLeaderboardPage({ params, searchParams }: PageProps) {
@@ -21,8 +23,9 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
   const game = decodeURIComponent(gameParam);
   const challengeName = decodeURIComponent(challengeParam);
   const activeWindow = parseLeaderboardWindow(sp.window);
+  const activeView = parseLeaderboardView(sp.view);
 
-  const entries = await getChallengeLeaderboard(game, challengeName, 50, activeWindow);
+  const entries = await getChallengeLeaderboard(game, challengeName, 50, activeWindow, activeView);
 
   return (
     <div>
@@ -31,7 +34,10 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
       <h1 className="font-display text-2xl font-bold text-white mt-2">{challengeName}</h1>
       <p className="text-sm text-slate-400 mb-6">{game}</p>
 
-      <WindowTabs game={game} challengeName={challengeName} active={activeWindow} />
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <WindowTabs game={game} challengeName={challengeName} activeWindow={activeWindow} activeView={activeView} />
+        <ViewToggle game={game} challengeName={challengeName} activeWindow={activeWindow} activeView={activeView} />
+      </div>
 
       {entries.length === 0 ? (
         <p className="text-slate-400 mt-8">
@@ -105,30 +111,86 @@ function Breadcrumb({ game, challengeName }: { game: string; challengeName: stri
   );
 }
 
+// Build a /c/<game>/<challenge>?... URL preserving the non-default of
+// either selector — drops keys when they're at their default to keep
+// shared URLs short.
+function buildHref(
+  game: string,
+  challengeName: string,
+  window: LeaderboardWindow,
+  view: LeaderboardView,
+): string {
+  const base = `/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
+  const params: string[] = [];
+  if (window !== 'all') params.push(`window=${window}`);
+  if (view !== 'best') params.push(`view=${view}`);
+  return params.length === 0 ? base : `${base}?${params.join('&')}`;
+}
+
 function WindowTabs({
   game,
   challengeName,
-  active,
+  activeWindow,
+  activeView,
 }: {
   game: string;
   challengeName: string;
-  active: LeaderboardWindow;
+  activeWindow: LeaderboardWindow;
+  activeView: LeaderboardView;
 }) {
   const tabs: { key: LeaderboardWindow; label: string }[] = [
     { key: 'daily',  label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
     { key: 'all',    label: 'All Time' },
   ];
-  const base = `/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
   return (
-    <nav className="mb-6 inline-flex gap-1 rounded-md border border-slate-700 bg-slate-900 p-1" aria-label="Leaderboard time window">
+    <nav className="inline-flex gap-1 rounded-md border border-slate-700 bg-slate-900 p-1" aria-label="Leaderboard time window">
       {tabs.map((t) => {
-        const isActive = t.key === active;
-        const href = t.key === 'all' ? base : `${base}?window=${t.key}`;
+        const isActive = t.key === activeWindow;
         return (
           <Link
             key={t.key}
-            href={href}
+            href={buildHref(game, challengeName, t.key, activeView)}
+            aria-current={isActive ? 'page' : undefined}
+            className={
+              isActive
+                ? 'px-3 py-1 rounded text-sm font-medium bg-indigo-500 text-white'
+                : 'px-3 py-1 rounded text-sm font-medium text-slate-300 hover:bg-slate-800'
+            }
+          >
+            {t.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+// Toggle between "best per user" (one row each) and "all attempts"
+// (every run, with possible duplicates from the same player).
+function ViewToggle({
+  game,
+  challengeName,
+  activeWindow,
+  activeView,
+}: {
+  game: string;
+  challengeName: string;
+  activeWindow: LeaderboardWindow;
+  activeView: LeaderboardView;
+}) {
+  const tabs: { key: LeaderboardView; label: string }[] = [
+    { key: 'best', label: 'Best per player' },
+    { key: 'all',  label: 'All attempts' },
+  ];
+  return (
+    <nav className="inline-flex gap-1 rounded-md border border-slate-700 bg-slate-900 p-1" aria-label="Leaderboard row mode">
+      {tabs.map((t) => {
+        const isActive = t.key === activeView;
+        return (
+          <Link
+            key={t.key}
+            href={buildHref(game, challengeName, activeWindow, t.key)}
             aria-current={isActive ? 'page' : undefined}
             className={
               isActive

@@ -23,6 +23,16 @@ export function parseLeaderboardWindow(value: string | undefined | null): Leader
   return WINDOW_KEYS.includes(value as LeaderboardWindow) ? (value as LeaderboardWindow) : 'all';
 }
 
+// View modes for the per-challenge leaderboard:
+//   'best'    — one row per player, showing their best run (default)
+//   'all'     — every run, including multiple by the same player
+export type LeaderboardView = 'best' | 'all';
+
+const VIEW_KEYS: readonly LeaderboardView[] = ['best', 'all'];
+export function parseLeaderboardView(value: string | undefined | null): LeaderboardView {
+  return VIEW_KEYS.includes(value as LeaderboardView) ? (value as LeaderboardView) : 'best';
+}
+
 // Cutoff date for the supplied window. 'all' returns null (no cutoff).
 // Exposed so tests / debugging can reason about it.
 export function windowSince(window: LeaderboardWindow, now: Date = new Date()): Date | null {
@@ -37,41 +47,82 @@ export function windowSince(window: LeaderboardWindow, now: Date = new Date()): 
 //   2. completionTimeFrames ASC  — faster wins ties (and is the primary
 //                                  axis for challenges that have no score)
 //   3. serverReceivedAt ASC      — whoever posted first breaks the final tie
+//
+// view='best' (default) collapses to one row per user (their best run).
+// view='all' shows every run including duplicates from the same user.
 export async function getChallengeLeaderboard(
   game: string,
   challengeName: string,
   limit = 50,
   window: LeaderboardWindow = 'all',
+  view: LeaderboardView = 'best',
 ): Promise<LeaderboardEntry[]> {
   const since = windowSince(window);
-  const rows = await prisma.run.findMany({
-    where: {
-      game,
-      challengeName,
-      hiddenAt: null,
-      user: { bannedAt: null },
-      ...(since ? { serverReceivedAt: { gte: since } } : {}),
+  const baseWhere = {
+    game,
+    challengeName,
+    hiddenAt: null,
+    user: { bannedAt: null },
+    ...(since ? { serverReceivedAt: { gte: since } } : {}),
+  };
+  const baseSelect = {
+    id: true,
+    score: true,
+    completionTimeFrames: true,
+    serverReceivedAt: true,
+    user: {
+      select: { id: true, name: true, pictureUrl: true },
     },
-    orderBy: [
-      { score: { sort: 'desc', nulls: 'last' } },
-      { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
-      { serverReceivedAt: 'asc' },
-    ],
-    take: limit,
-    select: {
-      id: true,
-      score: true,
-      completionTimeFrames: true,
-      serverReceivedAt: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          pictureUrl: true,
-        },
-      },
-    },
-  });
+  } as const;
+
+  type RawRow = {
+    id: string;
+    score: number | null;
+    completionTimeFrames: number | null;
+    serverReceivedAt: Date;
+    user: { id: string; name: string; pictureUrl: string | null };
+  };
+
+  let rows: RawRow[];
+
+  if (view === 'best') {
+    // DISTINCT ON userId — Prisma requires the distinct field to lead the
+    // orderBy, so we order by userId first to satisfy Postgres, then by
+    // the leaderboard sort to pick each user's best row. Result is
+    // ordered by userId; we re-sort into leaderboard order in JS and
+    // slice to the limit.
+    const dedup = await prisma.run.findMany({
+      where: baseWhere,
+      distinct: ['userId'],
+      orderBy: [
+        { userId: 'asc' },
+        { score: { sort: 'desc', nulls: 'last' } },
+        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+      ],
+      select: baseSelect,
+    });
+    dedup.sort((a, b) => {
+      const as = a.score ?? -Infinity;
+      const bs = b.score ?? -Infinity;
+      if (as !== bs) return bs - as;
+      const at = a.completionTimeFrames ?? Infinity;
+      const bt = b.completionTimeFrames ?? Infinity;
+      if (at !== bt) return at - bt;
+      return a.serverReceivedAt.getTime() - b.serverReceivedAt.getTime();
+    });
+    rows = dedup.slice(0, limit);
+  } else {
+    rows = await prisma.run.findMany({
+      where: baseWhere,
+      orderBy: [
+        { score: { sort: 'desc', nulls: 'last' } },
+        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+        { serverReceivedAt: 'asc' },
+      ],
+      take: limit,
+      select: baseSelect,
+    });
+  }
 
   return rows.map((r, idx) => ({
     runId: r.id,
