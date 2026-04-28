@@ -73,27 +73,33 @@ describe('parseLeaderboardView', () => {
 });
 
 describe('isBetterRun', () => {
-  test('higher score is better', () => {
-    expect(isBetterRun({ score: 5900, completionTimeFrames: 100 },
-                       { score: 5000, completionTimeFrames: 50 })).toBe(true);
-  });
-  test('on score tie, faster time is better', () => {
+  test('faster time is better, regardless of score', () => {
+    // Old behavior put score first — now time wins. A fast low-score run
+    // beats a slow high-score run.
     expect(isBetterRun({ score: 5000, completionTimeFrames: 50 },
+                       { score: 5900, completionTimeFrames: 100 })).toBe(true);
+  });
+  test('on time tie, higher score is better', () => {
+    expect(isBetterRun({ score: 8000, completionTimeFrames: 100 },
                        { score: 5000, completionTimeFrames: 100 })).toBe(true);
   });
-  test('on score tie, slower time is not better', () => {
-    expect(isBetterRun({ score: 5000, completionTimeFrames: 200 },
+  test('on time tie, lower score is not better', () => {
+    expect(isBetterRun({ score: 4000, completionTimeFrames: 100 },
                        { score: 5000, completionTimeFrames: 100 })).toBe(false);
   });
-  test('any score beats null score', () => {
-    expect(isBetterRun({ score: 1, completionTimeFrames: null },
-                       { score: null, completionTimeFrames: 5 })).toBe(true);
-    expect(isBetterRun({ score: null, completionTimeFrames: 5 },
-                       { score: 1, completionTimeFrames: null })).toBe(false);
+  test('any time beats null time', () => {
+    expect(isBetterRun({ score: null, completionTimeFrames: 100 },
+                       { score: 9999, completionTimeFrames: null })).toBe(true);
+    expect(isBetterRun({ score: 9999, completionTimeFrames: null },
+                       { score: null, completionTimeFrames: 100 })).toBe(false);
   });
   test('time-only challenges: faster wins', () => {
     expect(isBetterRun({ score: null, completionTimeFrames: 100 },
                        { score: null, completionTimeFrames: 200 })).toBe(true);
+  });
+  test('score-only challenges (legacy): higher score wins', () => {
+    expect(isBetterRun({ score: 9000, completionTimeFrames: null },
+                       { score: 5000, completionTimeFrames: null })).toBe(true);
   });
   test('exact tie is not strictly better', () => {
     expect(isBetterRun({ score: 5000, completionTimeFrames: 100 },
