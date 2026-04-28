@@ -43,10 +43,10 @@ export function windowSince(window: LeaderboardWindow, now: Date = new Date()): 
 
 // Top N rows for a (game, challenge) tuple within an optional time window.
 // Ordering:
-//   1. score DESC (nulls last)   — higher score wins
-//   2. completionTimeFrames ASC  — faster wins ties (and is the primary
-//                                  axis for challenges that have no score)
-//   3. serverReceivedAt ASC      — whoever posted first breaks the final tie
+//   1. completionTimeFrames ASC (nulls last) — fastest wins, primary axis
+//   2. score DESC (nulls last)               — higher score breaks ties
+//   3. serverReceivedAt ASC                  — whoever posted first breaks
+//                                              the final tie
 //
 // view='best' (default) collapses to one row per user (their best run).
 // view='all' shows every run including duplicates from the same user.
@@ -96,18 +96,18 @@ export async function getChallengeLeaderboard(
       distinct: ['userId'],
       orderBy: [
         { userId: 'asc' },
-        { score: { sort: 'desc', nulls: 'last' } },
         { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+        { score: { sort: 'desc', nulls: 'last' } },
       ],
       select: baseSelect,
     });
     dedup.sort((a, b) => {
-      const as = a.score ?? -Infinity;
-      const bs = b.score ?? -Infinity;
-      if (as !== bs) return bs - as;
       const at = a.completionTimeFrames ?? Infinity;
       const bt = b.completionTimeFrames ?? Infinity;
       if (at !== bt) return at - bt;
+      const as = a.score ?? -Infinity;
+      const bs = b.score ?? -Infinity;
+      if (as !== bs) return bs - as;
       return a.serverReceivedAt.getTime() - b.serverReceivedAt.getTime();
     });
     rows = dedup.slice(0, limit);
@@ -115,8 +115,8 @@ export async function getChallengeLeaderboard(
     rows = await prisma.run.findMany({
       where: baseWhere,
       orderBy: [
-        { score: { sort: 'desc', nulls: 'last' } },
         { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+        { score: { sort: 'desc', nulls: 'last' } },
         { serverReceivedAt: 'asc' },
       ],
       take: limit,
@@ -284,8 +284,8 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   const userRuns = await prisma.run.findMany({
     where: { userId, hiddenAt: null },
     orderBy: [
-      { score: { sort: 'desc', nulls: 'last' } },
       { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+      { score: { sort: 'desc', nulls: 'last' } },
     ],
     select: {
       id: true,
@@ -358,12 +358,17 @@ export interface RunMetric {
   completionTimeFrames: number | null;
 }
 export function isBetterRun(a: RunMetric, b: RunMetric): boolean {
-  const as = a.score ?? -Infinity;
-  const bs = b.score ?? -Infinity;
-  if (as !== bs) return as > bs;
+  // Time-first ranking: every shipping challenge is a speedrun (the
+  // win predicate is a state — boss dead, score reached, etc. — and
+  // the leaderboard cares about how fast you got there). Score is
+  // only used as a tie-break so score-only legacy challenges still
+  // sort sanely.
   const at = a.completionTimeFrames ?? Infinity;
   const bt = b.completionTimeFrames ?? Infinity;
-  return at < bt;
+  if (at !== bt) return at < bt;
+  const as = a.score ?? -Infinity;
+  const bs = b.score ?? -Infinity;
+  return as > bs;
 }
 
 // Rough relative-time string ("12m ago") for activity feed entries.
