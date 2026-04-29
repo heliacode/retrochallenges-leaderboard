@@ -1,5 +1,18 @@
 import { prisma } from './db';
 
+// Resolve a user's effective avatar URL: if they uploaded a custom one
+// it lives at /api/users/<id>/avatar, otherwise we fall back to whatever
+// Google OAuth gave us at sign-in time. Centralized so every leaderboard /
+// profile / activity response uses the same logic.
+export function effectivePictureUrl(user: {
+  id: string;
+  pictureUrl: string | null;
+  hasCustomAvatar?: boolean | null;
+}): string | null {
+  if (user.hasCustomAvatar) return `/api/users/${user.id}/avatar`;
+  return user.pictureUrl;
+}
+
 export interface LeaderboardEntry {
   runId: string;
   rank: number;
@@ -71,7 +84,7 @@ export async function getChallengeLeaderboard(
     completionTimeFrames: true,
     serverReceivedAt: true,
     user: {
-      select: { id: true, name: true, pictureUrl: true },
+      select: { id: true, name: true, pictureUrl: true, hasCustomAvatar: true },
     },
   } as const;
 
@@ -80,7 +93,7 @@ export async function getChallengeLeaderboard(
     score: number | null;
     completionTimeFrames: number | null;
     serverReceivedAt: Date;
-    user: { id: string; name: string; pictureUrl: string | null };
+    user: { id: string; name: string; pictureUrl: string | null; hasCustomAvatar: boolean };
   };
 
   let rows: RawRow[];
@@ -129,7 +142,7 @@ export async function getChallengeLeaderboard(
     rank: idx + 1,
     userId: r.user.id,
     userName: r.user.name,
-    userPictureUrl: r.user.pictureUrl,
+    userPictureUrl: effectivePictureUrl(r.user),
     score: r.score,
     completionTimeFrames: r.completionTimeFrames,
     serverReceivedAt: r.serverReceivedAt,
@@ -228,7 +241,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
       score: true,
       completionTimeFrames: true,
       serverReceivedAt: true,
-      user: { select: { id: true, name: true, pictureUrl: true } },
+      user: { select: { id: true, name: true, pictureUrl: true, hasCustomAvatar: true } },
     },
   });
   return rows.map((r) => ({
@@ -240,7 +253,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
     serverReceivedAt: r.serverReceivedAt,
     userId: r.user.id,
     userName: r.user.name,
-    userPictureUrl: r.user.pictureUrl,
+    userPictureUrl: effectivePictureUrl(r.user),
   }));
 }
 
@@ -277,7 +290,14 @@ export interface UserProfileChallenge {
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, pictureUrl: true, createdAt: true, bannedAt: true },
+    select: {
+      id: true,
+      name: true,
+      pictureUrl: true,
+      hasCustomAvatar: true,
+      createdAt: true,
+      bannedAt: true,
+    },
   });
   if (!user || user.bannedAt) return null;
 
@@ -338,7 +358,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   return {
     userId: user.id,
     name: user.name,
-    pictureUrl: user.pictureUrl,
+    pictureUrl: effectivePictureUrl(user),
     createdAt: user.createdAt,
     totalRuns: userRuns.length,
     challenges,

@@ -5,6 +5,7 @@ import {
   parseLeaderboardView,
   windowSince,
   isBetterRun,
+  effectivePictureUrl,
 } from '../src/lib/leaderboard';
 
 describe('formatFrames', () => {
@@ -122,5 +123,46 @@ describe('windowSince', () => {
   test('"weekly" cutoff is exactly 7 days before now', () => {
     const cutoff = windowSince('weekly', now);
     expect(cutoff).toEqual(new Date('2026-04-19T12:00:00Z'));
+  });
+});
+
+describe('effectivePictureUrl', () => {
+  test('returns the avatar route URL when the user has a custom avatar', () => {
+    expect(effectivePictureUrl({
+      id: 'u1',
+      pictureUrl: 'https://lh3.googleusercontent.com/a/abc',
+      hasCustomAvatar: true,
+    })).toBe('/api/users/u1/avatar');
+  });
+
+  test('falls back to the Google URL when no custom avatar is set', () => {
+    expect(effectivePictureUrl({
+      id: 'u1',
+      pictureUrl: 'https://lh3.googleusercontent.com/a/abc',
+      hasCustomAvatar: false,
+    })).toBe('https://lh3.googleusercontent.com/a/abc');
+  });
+
+  test('returns null when neither custom nor Google URL is available', () => {
+    expect(effectivePictureUrl({
+      id: 'u1',
+      pictureUrl: null,
+      hasCustomAvatar: false,
+    })).toBeNull();
+  });
+
+  test('treats missing hasCustomAvatar as false (legacy rows)', () => {
+    expect(effectivePictureUrl({
+      id: 'u1',
+      pictureUrl: 'https://lh3.googleusercontent.com/a/abc',
+    })).toBe('https://lh3.googleusercontent.com/a/abc');
+  });
+
+  test('custom avatar wins even when Google URL is also set', () => {
+    expect(effectivePictureUrl({
+      id: 'u1',
+      pictureUrl: 'https://lh3.googleusercontent.com/a/abc',
+      hasCustomAvatar: true,
+    })).toBe('/api/users/u1/avatar');
   });
 });
