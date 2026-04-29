@@ -17,7 +17,19 @@ model User {
   googleSub  String    @unique
   email      String
   name       String
+  // Picture from Google OAuth; used when the user has not uploaded a custom
+  // avatar of their own. When the user has, the API surfaces a
+  // /api/users/<id>/avatar URL instead and serves it from pictureBlob.
   pictureUrl String?
+  // User-uploaded avatar. Constraints enforced server-side at upload:
+  // <= 1 MB, <= 1024x1024, square. Stored as bytea so we don't need a
+  // Railway volume just for one feature. Fetch via /api/users/<id>/avatar.
+  pictureBlob     Bytes?
+  pictureMimeType String?
+  // Mirror of (pictureBlob != null) so leaderboard / profile queries don't
+  // have to fetch the blob just to know whether to point at the avatar
+  // route or fall back to pictureUrl. Toggled by the upload route.
+  hasCustomAvatar Boolean   @default(false)
   createdAt  DateTime  @default(now())
   // Soft-ban. Banned users' runs are hidden from public leaderboards even
   // if individual runs aren't marked hiddenAt.
