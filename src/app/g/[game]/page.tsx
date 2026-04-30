@@ -7,6 +7,12 @@ import {
   listChallengeSummaries,
   type ChallengeSummary,
 } from '@/lib/leaderboard';
+import {
+  CATEGORY_ORDER,
+  categoryLabel,
+  getChallengesManifest,
+  manifestKey,
+} from '@/lib/challenges-manifest';
 
 // Skip build-time pre-render — we don't have a DB at build time on Railway.
 export const dynamic = 'force-dynamic';
@@ -15,13 +21,28 @@ interface PageProps {
   params: Promise<{ game: string }>;
 }
 
+// Local rendering type — ChallengeSummary plus the category we looked up
+// from the assets-repo manifest. Category may be undefined (manifest fetch
+// failed, or the assets repo hasn't shipped a category for this entry yet),
+// in which case the row falls into the "Other" group.
+type AnnotatedSummary = ChallengeSummary & { category?: string };
+
 export default async function GameDetailPage({ params }: PageProps) {
   const { game: gameParam } = await params;
   const game = decodeURIComponent(gameParam);
 
-  const summaries = await listChallengeSummaries(game);
+  const [summaries, manifest] = await Promise.all([
+    listChallengeSummaries(game),
+    getChallengesManifest(),
+  ]);
   if (summaries.length === 0) notFound();
 
+  const annotated: AnnotatedSummary[] = summaries.map((s) => ({
+    ...s,
+    category: manifest.get(manifestKey(s.game, s.challengeName))?.category,
+  }));
+
+  const groups = groupByCategory(annotated);
   const totalRuns = summaries.reduce((sum, s) => sum + s.runCount, 0);
 
   return (
@@ -33,14 +54,64 @@ export default async function GameDetailPage({ params }: PageProps) {
         {summaries.length} challenge{summaries.length === 1 ? '' : 's'} · {totalRuns} run{totalRuns === 1 ? '' : 's'}
       </p>
 
+      <div className="space-y-8">
+        {groups.map(({ category, items }) => (
+          <CategorySection key={category} category={category} items={items} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Bucket annotated summaries by category and emit groups in a stable order
+// (CATEGORY_ORDER, then anything unknown, then 'other' last). Groups with
+// zero items are dropped so we don't render empty headers.
+function groupByCategory(
+  rows: AnnotatedSummary[],
+): { category: string; items: AnnotatedSummary[] }[] {
+  const buckets = new Map<string, AnnotatedSummary[]>();
+  for (const r of rows) {
+    const key = r.category ?? 'other';
+    const list = buckets.get(key);
+    if (list) list.push(r);
+    else buckets.set(key, [r]);
+  }
+  const ordered: string[] = [];
+  for (const k of CATEGORY_ORDER) if (buckets.has(k)) ordered.push(k);
+  // Any unknown categories from upstream (e.g. assets repo adds 'gauntlet'
+  // before we update the leaderboard's CATEGORY_ORDER) get rendered between
+  // known categories and the 'other' bucket, sorted alphabetically.
+  const unknowns = Array.from(buckets.keys())
+    .filter((k) => k !== 'other' && !CATEGORY_ORDER.includes(k))
+    .sort();
+  ordered.push(...unknowns);
+  if (buckets.has('other')) ordered.push('other');
+  return ordered.map((category) => ({ category, items: buckets.get(category)! }));
+}
+
+function CategorySection({
+  category,
+  items,
+}: {
+  category: string;
+  items: AnnotatedSummary[];
+}) {
+  return (
+    <section>
+      <h2 className="font-display text-lg font-semibold text-white mb-3 flex items-baseline gap-2">
+        {categoryLabel(category)}
+        <span className="text-xs font-normal text-slate-500">
+          {items.length} challenge{items.length === 1 ? '' : 's'}
+        </span>
+      </h2>
       <ul className="grid gap-3 sm:grid-cols-2">
-        {summaries.map((c) => (
+        {items.map((c) => (
           <li key={`${c.game}::${c.challengeName}`}>
             <ChallengeCard summary={c} />
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
