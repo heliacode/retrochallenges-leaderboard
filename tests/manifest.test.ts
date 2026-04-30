@@ -2,6 +2,8 @@ import {
   parseManifest,
   manifestKey,
   categoryLabel,
+  filterSearchItems,
+  type SearchItem,
 } from '../src/lib/challenges-manifest';
 
 describe('parseManifest', () => {
@@ -83,5 +85,50 @@ describe('categoryLabel', () => {
     // the leaderboard's vocabulary, and we render it as-is rather than
     // hiding it.
     expect(categoryLabel('gauntlet')).toBe('gauntlet');
+  });
+});
+
+describe('filterSearchItems', () => {
+  const items: SearchItem[] = [
+    { type: 'game',      label: 'Castlevania',           href: '/g/Castlevania' },
+    { type: 'game',      label: 'Mega Man 2',            href: '/g/Mega%20Man%202' },
+    { type: 'challenge', label: 'Phantom Bat — No Subweapon!', context: 'Castlevania', href: '/c/...' },
+    { type: 'challenge', label: 'Metal Man Boss Fight',  context: 'Mega Man 2',  href: '/c/...' },
+    { type: 'challenge', label: 'Cross the Big Bridge!', context: 'Castlevania', href: '/c/...' },
+  ];
+
+  test('empty / whitespace query returns no results', () => {
+    expect(filterSearchItems(items, '')).toEqual([]);
+    expect(filterSearchItems(items, '   ')).toEqual([]);
+  });
+
+  test('case-insensitive substring match on label', () => {
+    const r = filterSearchItems(items, 'METAL');
+    expect(r.length).toBe(1);
+    expect(r[0].label).toBe('Metal Man Boss Fight');
+  });
+
+  test('matches against context (parent game)', () => {
+    const r = filterSearchItems(items, 'castlevania');
+    // Game tile + 2 challenges sharing the Castlevania context.
+    expect(r.length).toBe(3);
+    // Game (label match, tier 0) ranks before challenges (context match, tier 1+).
+    expect(r[0].type).toBe('game');
+  });
+
+  test('prefix matches outrank infix matches', () => {
+    const r = filterSearchItems(items, 'man');
+    // "Mega Man 2" (label prefix) and "Metal Man Boss Fight" both match;
+    // game with prefix-on-label should appear before challenge that only
+    // contains "man" mid-string.
+    expect(r[0].label).toBe('Mega Man 2');
+  });
+
+  test('respects the limit', () => {
+    expect(filterSearchItems(items, 'a', 2).length).toBe(2);
+  });
+
+  test('no matches returns empty array', () => {
+    expect(filterSearchItems(items, 'xyzzy')).toEqual([]);
   });
 });

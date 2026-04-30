@@ -105,3 +105,45 @@ export function categoryLabel(category: string | undefined): string {
   if (!category) return CATEGORY_LABELS.other;
   return CATEGORY_LABELS[category] ?? category;
 }
+
+// ---------------------------------------------------------------------------
+// Search index — flat list of games + challenges that the header search
+// component fuzzy-matches against. Built from the manifest so it includes
+// challenges that have zero runs yet (otherwise users couldn't navigate
+// to a brand-new challenge until someone played it).
+// ---------------------------------------------------------------------------
+export type SearchItemType = 'game' | 'challenge';
+export interface SearchItem {
+  type: SearchItemType;
+  label: string;       // headline text shown in the dropdown row
+  context?: string;    // secondary line — e.g. parent game for a challenge
+  href: string;        // navigation target on click / Enter
+}
+
+// Substring filter used by the header search dropdown. Case-insensitive,
+// matches the query against either the label or the context. Returns up to
+// `limit` items, ordered: exact-prefix label matches first, then prefix
+// context matches, then any-substring matches. Stable within each tier.
+export function filterSearchItems(
+  items: readonly SearchItem[],
+  query: string,
+  limit = 8,
+): SearchItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  type Scored = { item: SearchItem; tier: number; idx: number };
+  const scored: Scored[] = [];
+  for (let idx = 0; idx < items.length; idx++) {
+    const it = items[idx];
+    const label = it.label.toLowerCase();
+    const ctx   = (it.context ?? '').toLowerCase();
+    let tier = -1;
+    if (label.startsWith(q))           tier = 0;
+    else if (ctx && ctx.startsWith(q)) tier = 1;
+    else if (label.includes(q))        tier = 2;
+    else if (ctx && ctx.includes(q))   tier = 3;
+    if (tier >= 0) scored.push({ item: it, tier, idx });
+  }
+  scored.sort((a, b) => (a.tier !== b.tier ? a.tier - b.tier : a.idx - b.idx));
+  return scored.slice(0, limit).map((s) => s.item);
+}
