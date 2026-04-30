@@ -1,6 +1,7 @@
 import {
   formatFrames,
   challengeHref,
+  gameHref,
   parseLeaderboardWindow,
   parseLeaderboardView,
   windowSince,
@@ -42,6 +43,16 @@ describe('challengeHref', () => {
     const name = 'Level 1/2 warp';
     const href = challengeHref('Super Mario Bros', name);
     expect(href.includes('%2F')).toBe(true);
+  });
+});
+
+describe('gameHref', () => {
+  test('builds /g/<game>', () => {
+    expect(gameHref('Castlevania')).toBe('/g/Castlevania');
+  });
+
+  test('percent-encodes spaces', () => {
+    expect(gameHref('Super Mario Bros')).toBe('/g/Super%20Mario%20Bros');
   });
 });
 

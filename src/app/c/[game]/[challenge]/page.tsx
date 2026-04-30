@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  gameHref,
   getChallengeLeaderboard,
   formatFrames,
   parseLeaderboardWindow,
@@ -104,7 +105,7 @@ function Breadcrumb({ game, challengeName }: { game: string; challengeName: stri
     <nav className="text-sm text-slate-500">
       <Link href="/" className="hover:text-slate-300">Leaderboards</Link>
       <span className="mx-2">/</span>
-      <span className="text-slate-400">{game}</span>
+      <Link href={gameHref(game)} className="text-slate-400 hover:text-slate-200">{game}</Link>
       <span className="mx-2">/</span>
       <span className="text-slate-300">{challengeName}</span>
     </nav>

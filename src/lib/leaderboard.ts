@@ -176,10 +176,17 @@ export interface ChallengeSummary {
   topRun: LeaderboardEntry | null;
 }
 
-export async function listChallengeSummaries(): Promise<ChallengeSummary[]> {
+// `game` (optional) scopes the result to a single game's challenges, used
+// by /g/[game] to render the game-detail page. Unscoped, this powers the
+// home page's cross-game catalog.
+export async function listChallengeSummaries(game?: string): Promise<ChallengeSummary[]> {
   const groups = await prisma.run.groupBy({
     by: ['game', 'challengeName'],
-    where: { hiddenAt: null, user: { bannedAt: null } },
+    where: {
+      hiddenAt: null,
+      user: { bannedAt: null },
+      ...(game ? { game } : {}),
+    },
     _count: { _all: true },
     orderBy: [{ game: 'asc' }, { challengeName: 'asc' }],
   });
@@ -194,6 +201,51 @@ export async function listChallengeSummaries(): Promise<ChallengeSummary[]> {
         challengeName: g.challengeName,
         runCount: g._count._all,
         topRun: top[0] ?? null,
+      };
+    }),
+  );
+}
+
+// One row per game that has at least one visible run. Powers the game-tile
+// grid on the home page — each tile links to /g/[game] and shows the per-
+// game stat strip (challenges / runs / players).
+//
+// Implementation: one groupBy('game') for the run counts, then per-game
+// secondary groupBy queries to count distinct challenges and distinct
+// players. N+1 with N = number of games (single-digit at our scale, low
+// double-digit in the foreseeable future) — revisit with a single SQL
+// window-function query if the catalog ever grows beyond ~50 games.
+export interface GameSummary {
+  game: string;
+  totalChallenges: number;
+  totalRuns: number;
+  totalPlayers: number;
+}
+
+export async function listGames(): Promise<GameSummary[]> {
+  const games = await prisma.run.groupBy({
+    by: ['game'],
+    where: { hiddenAt: null, user: { bannedAt: null } },
+    _count: { _all: true },
+    orderBy: { game: 'asc' },
+  });
+  return Promise.all(
+    games.map(async (g) => {
+      const [challengeRows, playerRows] = await Promise.all([
+        prisma.run.groupBy({
+          by: ['challengeName'],
+          where: { game: g.game, hiddenAt: null, user: { bannedAt: null } },
+        }),
+        prisma.run.groupBy({
+          by: ['userId'],
+          where: { game: g.game, hiddenAt: null, user: { bannedAt: null } },
+        }),
+      ]);
+      return {
+        game: g.game,
+        totalChallenges: challengeRows.length,
+        totalRuns: g._count._all,
+        totalPlayers: playerRows.length,
       };
     }),
   );
@@ -424,4 +476,8 @@ export function formatFrames(frames: number | null): string {
 // site never disagree.
 export function challengeHref(game: string, challengeName: string): string {
   return `/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
+}
+
+export function gameHref(game: string): string {
+  return `/g/${encodeURIComponent(game)}`;
 }

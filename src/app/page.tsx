@@ -4,11 +4,12 @@ import {
   challengeHref,
   formatFrames,
   formatRelative,
+  gameHref,
   getOverallStats,
   getRecentRuns,
-  listChallengeSummaries,
+  listGames,
   userProfileHref,
-  type ChallengeSummary,
+  type GameSummary,
   type RecentRunEntry,
 } from '@/lib/leaderboard';
 
@@ -16,17 +17,17 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
-  const [stats, summaries, recent] = await Promise.all([
+  const [stats, games, recent] = await Promise.all([
     getOverallStats(),
-    listChallengeSummaries(),
-    getRecentRuns(10),
+    listGames(),
+    getRecentRuns(8),
   ]);
 
   return (
     <div className="space-y-10">
       <Hero stats={stats} />
 
-      {summaries.length === 0 ? (
+      {games.length === 0 ? (
         <section className="rounded-lg border border-dashed border-slate-700 p-8 text-center">
           <p className="text-slate-400">
             No runs submitted yet. Be the first — open the FlawlessNes app and beat a challenge.
@@ -34,7 +35,7 @@ export default async function HomePage() {
         </section>
       ) : (
         <>
-          <ChallengesSection summaries={summaries} />
+          <GamesSection games={games} />
           {recent.length > 0 && <RecentActivity runs={recent} />}
         </>
       )}
@@ -74,80 +75,53 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ChallengesSection({ summaries }: { summaries: ChallengeSummary[] }) {
-  // Group by game while preserving the alphabetical order from the DB.
-  const byGame = new Map<string, ChallengeSummary[]>();
-  for (const s of summaries) {
-    const list = byGame.get(s.game);
-    if (list) list.push(s);
-    else byGame.set(s.game, [s]);
-  }
-
+function GamesSection({ games }: { games: GameSummary[] }) {
   return (
-    <section className="space-y-8">
-      {Array.from(byGame.entries()).map(([game, list]) => (
-        <div key={game}>
-          <h2 className="font-display text-xl font-semibold text-white mb-3">{game}</h2>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {list.map((c) => (
-              <li key={`${c.game}::${c.challengeName}`}>
-                <ChallengeCard summary={c} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <section>
+      <h2 className="font-display text-xl font-semibold text-white mb-3">Games</h2>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {games.map((g) => (
+          <li key={g.game}>
+            <GameTile game={g} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-function ChallengeCard({ summary }: { summary: ChallengeSummary }) {
-  const top = summary.topRun;
+function GameTile({ game }: { game: GameSummary }) {
   return (
     <Link
-      href={challengeHref(summary.game, summary.challengeName)}
-      className="group block rounded-lg border border-slate-700 bg-slate-900 p-4 transition-colors hover:border-indigo-500 hover:bg-slate-800"
+      href={gameHref(game.game)}
+      className="group block rounded-lg border border-slate-700 bg-slate-900 p-5 transition-colors hover:border-indigo-500 hover:bg-slate-800"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-medium text-slate-100 truncate">{summary.challengeName}</div>
-          <div className="text-xs text-slate-500 mt-0.5">
-            {summary.runCount} run{summary.runCount === 1 ? '' : 's'}
-          </div>
-        </div>
+        <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
         <span
           className="shrink-0 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300"
           aria-hidden="true"
         >
-          View &rarr;
+          Browse &rarr;
         </span>
       </div>
-
-      {top && (
-        <div className="mt-3 flex items-center gap-2 rounded-md bg-slate-925 px-2.5 py-2 text-sm">
-          <span className="font-mono text-amber-300" aria-label="Rank 1">#1</span>
-          {top.userPictureUrl ? (
-            <Image
-              src={top.userPictureUrl}
-              alt=""
-              width={20}
-              height={20}
-              className="rounded-full"
-            />
-          ) : (
-            <div className="w-5 h-5 rounded-full bg-slate-700" aria-hidden="true" />
-          )}
-          {/* Username inside the card-Link can't be its own Link in valid
-              HTML, so we keep it as plain text here. The whole card already
-              navigates to the challenge; the dedicated profile path is via
-              the username column on the per-challenge leaderboard table. */}
-          <span className="text-slate-200 truncate flex-1">{top.userName}</span>
-          <span className="font-mono text-slate-300 tabular-nums">
-            {formatTopMetric(top.score, top.completionTimeFrames)}
-          </span>
-        </div>
-      )}
+      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <TileStat label="challenges" value={game.totalChallenges} />
+        <TileStat label="runs"       value={game.totalRuns} />
+        <TileStat label="players"    value={game.totalPlayers} />
+      </dl>
     </Link>
+  );
+}
+
+function TileStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md bg-slate-925 px-2 py-1.5">
+      <dd className="font-mono text-base font-semibold text-slate-100 tabular-nums">
+        {value.toLocaleString()}
+      </dd>
+      <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
+    </div>
   );
 }
 
@@ -195,7 +169,9 @@ function RecentActivity({ runs }: { runs: RecentRunEntry[] }) {
                   {r.challengeName}
                 </Link>
                 <span className="text-slate-500"> in </span>
-                <span className="text-slate-100">{r.game}</span>
+                <Link href={gameHref(r.game)} className="text-slate-100 hover:text-indigo-300">
+                  {r.game}
+                </Link>
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
                 {formatTopMetric(r.score, r.completionTimeFrames)}
