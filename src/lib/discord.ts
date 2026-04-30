@@ -51,7 +51,7 @@ export async function notifyDiscordTopPlacement(p: DiscordTopPlacementPayload): 
     color,
     url: p.publicHref,
     timestamp: new Date().toISOString(),
-    footer: { text: 'RetroChallenges leaderboard' },
+    footer: { text: 'FlawlessNes leaderboard' },
   };
   if (p.playerAvatarUrl) {
     embed.thumbnail = { url: p.playerAvatarUrl };
@@ -62,7 +62,7 @@ export async function notifyDiscordTopPlacement(p: DiscordTopPlacementPayload): 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: 'RetroChallenges Bot',
+        username: 'FlawlessNes Bot',
         embeds: [embed],
       }),
     });
