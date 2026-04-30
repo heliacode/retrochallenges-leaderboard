@@ -13,7 +13,7 @@
 }
 
 :focus-visible {
-  outline: 2px solid #60a5fa;
+  outline: 2px solid #E40058;
   outline-offset: 2px;
   border-radius: 4px;
 }
