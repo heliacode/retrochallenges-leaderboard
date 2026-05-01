@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { verifySubmissionSecret } from '@/lib/auth';
+import { resolveTargetUserId } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
-// PATCH /api/users/me — change the signed-in user's display name. Identity
-// comes from the body (googleSub) per the same trust model the runs
-// endpoint uses: the submission secret authenticates the desktop app,
-// and we trust the app-claimed user.
+// PATCH /api/users/me — change the signed-in user's display name.
+//
+// Two callers:
+//  - Web /me page: NextAuth session identifies the user; body.googleSub
+//    is ignored (and may be omitted).
+//  - Desktop app: shared submission secret + body.googleSub in the
+//    payload (legacy trust model).
+//
+// resolveTargetUserId() normalizes both into a User.id.
 const PatchSchema = z.object({
-  googleSub: z.string().min(1).max(128),
+  // Optional under web-session auth; required under secret auth. The
+  // resolver enforces "secret-auth without googleSub" → 401.
+  googleSub: z.string().min(1).max(128).optional(),
   name: z.string().min(1).max(120),
 });
 
 export async function PATCH(req: NextRequest) {
-  if (!verifySubmissionSecret(req.headers.get('x-rc-submission-secret'))) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
   let raw: unknown;
   try {
     raw = await req.json();
@@ -33,16 +36,21 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  const userId = await resolveTargetUserId(req, parsed.data.googleSub ?? null);
+  if (!userId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
   try {
     const user = await prisma.user.update({
-      where: { googleSub: parsed.data.googleSub },
+      where: { id: userId },
       data: { name: parsed.data.name.trim() },
       select: { id: true, name: true },
     });
     return NextResponse.json({ ok: true, userId: user.id, name: user.name });
   } catch {
-    // Most likely Prisma's P2025 (record not found) — user hasn't submitted
-    // a run yet so they're not in our table. Return 404 with a clear code.
+    // Most likely Prisma's P2025 (record not found) — race with admin
+    // delete or stale session. Return 404 with a clear code.
     return NextResponse.json({ error: 'user_not_found' }, { status: 404 });
   }
 }

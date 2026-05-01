@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { HeaderSearch } from '@/components/HeaderSearch';
+import { HeaderUserMenu } from '@/components/HeaderUserMenu';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex-1 flex justify-end">
               <HeaderSearch />
             </div>
+            <HeaderUserMenu />
           </div>
         </header>
 
