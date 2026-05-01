@@ -41,6 +41,13 @@ model User {
   // NextAuth fields — emailVerified is required by the adapter; we leave
   // it nullable since Google OAuth doesn't reliably populate it.
   emailVerified DateTime?
+  // NextAuth's standard `image` column. Auth.js's adapter populates this
+  // on user-create from the OAuth profile picture; we keep it alongside
+  // pictureUrl (which the rest of the app reads) — both get the same
+  // Google avatar URL on signup. The redundancy is intentional: changing
+  // pictureUrl across the app + desktop client + Lua framework would be
+  // a much larger refactor than carrying one extra column.
+  image         String?
 
   runs     Run[]
   accounts Account[]

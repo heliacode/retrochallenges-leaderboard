@@ -1,0 +1,11 @@
+-- NextAuth's @auth/prisma-adapter calls prisma.user.create({ data: { ..., image: ... } })
+-- on first sign-in for a brand new user. Without an `image` column the
+-- create fails with "Unknown argument image" and the OAuth round-trip
+-- aborts. The desktop app's existing flow doesn't hit this path because
+-- its first DB write is a Run upsert, not a User create.
+--
+-- We keep `pictureUrl` alongside `image` so the rest of the app and the
+-- desktop client don't need to change — both columns hold the same
+-- Google avatar URL on signup; only `pictureUrl` is mirrored when the
+-- user uploads a custom avatar.
+ALTER TABLE "User" ADD COLUMN "image" TEXT;
