@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { verifySubmissionSecret } from '@/lib/auth';
+import { resolveTargetUserId } from '@/lib/auth';
 import { validateAvatarUpload, AVATAR_MAX_BYTES } from '@/lib/avatar';
 
 export const runtime = 'nodejs';
@@ -11,14 +11,14 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 // POST /api/users/me/avatar — multipart/form-data with:
-//   field "googleSub": string  (identifies which user; same trust model
-//                                as /api/runs)
+//   field "googleSub": string  (only required when authenticating via the
+//                                shared submission secret; ignored when a
+//                                NextAuth session is present)
 //   field "avatar":   File     (PNG / JPEG / WebP, <= 1MB, <= 1024^2, square)
+//
+// Dual auth: web /me page calls this through a NextAuth session; the
+// desktop app posts with submission secret + googleSub.
 export async function POST(req: NextRequest) {
-  if (!verifySubmissionSecret(req.headers.get('x-rc-submission-secret'))) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
   let form: FormData;
   try {
     form = await req.formData();
@@ -26,12 +26,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_form_data' }, { status: 400 });
   }
 
-  const googleSub = form.get('googleSub');
+  const googleSubField = form.get('googleSub');
+  const googleSub = typeof googleSubField === 'string' && googleSubField.length > 0
+    ? googleSubField
+    : null;
   const avatar    = form.get('avatar');
 
-  if (typeof googleSub !== 'string' || googleSub.length === 0) {
-    return NextResponse.json({ error: 'missing_googleSub' }, { status: 400 });
+  const userId = await resolveTargetUserId(req, googleSub);
+  if (!userId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
   if (!(avatar instanceof File)) {
     return NextResponse.json({ error: 'missing_avatar_file' }, { status: 400 });
   }
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const user = await prisma.user.update({
-      where: { googleSub },
+      where: { id: userId },
       data: {
         pictureBlob:     validation.buffer,
         pictureMimeType: validation.mimeType,

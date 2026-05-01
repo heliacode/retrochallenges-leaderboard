@@ -32,6 +32,7 @@ function LandingPage() {
     <div className="space-y-16">
       <Hero />
       <Features />
+      <FeaturedCreator />
       <Creators />
     </div>
   );
@@ -57,6 +58,12 @@ function Hero() {
           Download for Windows
         </a>
         <Link
+          href="/signin"
+          className="inline-flex items-center gap-2 rounded-md border border-indigo-400 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-indigo-200 hover:bg-slate-800 transition-colors"
+        >
+          Sign in with Google
+        </Link>
+        <Link
           href="/leaderboards"
           className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:border-indigo-500 hover:bg-slate-800 transition-colors"
         >
@@ -64,7 +71,7 @@ function Hero() {
         </Link>
       </div>
       <p className="mt-3 text-xs text-slate-500">
-        Sign in with Google coming soon — your stats follow you across desktop and web.
+        Same Google account works across the desktop app and web — your stats follow you.
       </p>
     </section>
   );
@@ -98,6 +105,44 @@ function Features() {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+// Featured-creator spotlight. Hand-curated card sitting between the
+// generic features section and the broader creators strip — bigger
+// visual weight, with both Twitch and YouTube CTAs side-by-side.
+function FeaturedCreator() {
+  return (
+    <section className="rounded-lg border border-slate-700 bg-slate-900 p-6 sm:p-8">
+      <p className="text-xs uppercase tracking-wider text-indigo-300 font-semibold mb-2">
+        Featured creator
+      </p>
+      <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">Slackanater</h2>
+      <p className="mt-3 text-slate-300 max-w-2xl">
+        Retro NES streamer focused on damageless playthroughs and clean speedruns.
+        Pulled off the world&rsquo;s first <span className="text-white font-medium">100% damageless run of Ninja Gaiden NES</span>{' '}
+        — the kind of patience-and-pattern-recognition mastery FlawlessNES is built around.
+        Catch live runs on Twitch and breakdowns on YouTube.
+      </p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <a
+          href="https://twitch.tv/slackanater"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-indigo-500/20 hover:bg-indigo-600 transition-colors"
+        >
+          Watch on Twitch
+        </a>
+        <a
+          href="https://www.youtube.com/channel/UCfXIDj6qnRZBRLgIib0PZbQ"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:border-indigo-500 hover:bg-slate-700 transition-colors"
+        >
+          Subscribe on YouTube
+        </a>
+      </div>
     </section>
   );
 }
