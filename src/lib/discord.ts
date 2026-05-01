@@ -51,7 +51,7 @@ export async function notifyDiscordTopPlacement(p: DiscordTopPlacementPayload): 
     color,
     url: p.publicHref,
     timestamp: new Date().toISOString(),
-    footer: { text: 'FlawlessNes leaderboard' },
+    footer: { text: 'FlawlessNES leaderboard' },
   };
   if (p.playerAvatarUrl) {
     embed.thumbnail = { url: p.playerAvatarUrl };
@@ -62,7 +62,7 @@ export async function notifyDiscordTopPlacement(p: DiscordTopPlacementPayload): 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: 'FlawlessNes Bot',
+        username: 'FlawlessNES Bot',
         embeds: [embed],
       }),
     });

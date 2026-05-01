@@ -4,8 +4,8 @@ import { HeaderSearch } from '@/components/HeaderSearch';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FlawlessNes Leaderboard',
-  description: 'Community leaderboards for FlawlessNes — retro gaming challenges with verified completions.',
+  title: 'FlawlessNES Leaderboard',
+  description: 'Community leaderboards for FlawlessNES — retro gaming challenges with verified completions.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -23,7 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="border-b border-slate-700 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
           <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-4">
             <Link href="/" className="font-display text-xl font-bold text-white shrink-0">
-              FlawlessNes
+              FlawlessNES
             </Link>
             <div className="flex-1 flex justify-end">
               <HeaderSearch />
@@ -34,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
 
         <footer className="border-t border-slate-700 mt-16 py-6 text-center text-xs text-slate-500">
-          <span>&copy; 2026 FlawlessNes</span>
+          <span>&copy; 2026 FlawlessNES</span>
         </footer>
       </body>
     </html>
