@@ -22,6 +22,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // Existing desktop-app users have a User row keyed by googleSub but
+      // no Account row. Without this flag, their first website sign-in
+      // hits OAuthAccountNotLinked. Safe here because Google is our only
+      // provider and Google always verifies email ownership server-side
+      // — there's no second untrusted provider that could spoof email.
+      allowDangerousEmailAccountLinking: true,
       // Mirror the OAuth profile into the columns that pre-existed
       // (googleSub + pictureUrl) so the rest of the app keeps reading
       // them without a separate migration step. The adapter still fills
