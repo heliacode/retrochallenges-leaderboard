@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { auth, signIn, signOut } from '@/auth';
 import { EditProfilePanel } from '@/components/EditProfilePanel';
+import { RefreshOnFocus } from '@/components/RefreshOnFocus';
 import {
   challengeHref,
   formatFrames,
@@ -31,6 +32,7 @@ export default async function MyDashboardPage() {
 
   return (
     <div className="space-y-8">
+      <RefreshOnFocus />
       <Hero profile={profile} />
       <EditProfilePanel
         currentName={profile.name}
