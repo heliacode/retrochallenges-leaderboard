@@ -118,7 +118,7 @@ function CategorySection({
 function Breadcrumb({ game }: { game: string }) {
   return (
     <nav className="text-sm text-slate-500">
-      <Link href="\" className="hover:text-slate-300">Leaderboards</Link>
+      <Link href="/leaderboards" className="hover:text-slate-300">Leaderboards</Link>
       <span className="mx-2">/</span>
       <span className="text-slate-300">{game}</span>
     </nav>

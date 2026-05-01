@@ -473,11 +473,12 @@ export function formatFrames(frames: number | null): string {
 
 // Percent-encoded segments for URL building. We keep game / challenge names
 // as the raw identifiers rather than inventing slugs so the desktop app and
-// site never disagree.
+// site never disagree. Both helpers emit URLs under /leaderboards/ —
+// individual pages live there so the catalog hierarchy is consistent.
 export function challengeHref(game: string, challengeName: string): string {
-  return `/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
+  return `/leaderboards/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
 }
 
 export function gameHref(game: string): string {
-  return `/g/${encodeURIComponent(game)}`;
+  return `/leaderboards/g/${encodeURIComponent(game)}`;
 }

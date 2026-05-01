@@ -33,26 +33,27 @@ describe('formatFrames', () => {
 });
 
 describe('challengeHref', () => {
-  test('percent-encodes spaces and punctuation', () => {
+  test('builds /leaderboards/c/<game>/<challenge> with percent-encoding', () => {
     expect(challengeHref('Castlevania', 'Get 5000 points!')).toBe(
-      '/c/Castlevania/Get%205000%20points!',
+      '/leaderboards/c/Castlevania/Get%205000%20points!',
     );
   });
 
   test('round-trips a slashy name', () => {
     const name = 'Level 1/2 warp';
     const href = challengeHref('Super Mario Bros', name);
+    expect(href.startsWith('/leaderboards/c/')).toBe(true);
     expect(href.includes('%2F')).toBe(true);
   });
 });
 
 describe('gameHref', () => {
-  test('builds /g/<game>', () => {
-    expect(gameHref('Castlevania')).toBe('/g/Castlevania');
+  test('builds /leaderboards/g/<game>', () => {
+    expect(gameHref('Castlevania')).toBe('/leaderboards/g/Castlevania');
   });
 
   test('percent-encodes spaces', () => {
-    expect(gameHref('Super Mario Bros')).toBe('/g/Super%20Mario%20Bros');
+    expect(gameHref('Super Mario Bros')).toBe('/leaderboards/g/Super%20Mario%20Bros');
   });
 });
 
