@@ -5,8 +5,9 @@ export const runtime = 'nodejs';
 
 // GET /api/users/[id]/avatar — streams the user's uploaded avatar blob.
 // Public (no secret); the same accessibility level as the SSR profile
-// page at /u/[id]. Browser caches for an hour so leaderboard pages don't
-// re-fetch on every render.
+// page at /u/[id]. Short browser cache (60s) so a fresh upload becomes
+// visible quickly after the user edits their profile, with stale-while-
+// revalidate to soften the re-fetch cost on busy leaderboard pages.
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -35,7 +36,7 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type':  user.pictureMimeType ?? 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600',
+      'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
     },
   });
 }

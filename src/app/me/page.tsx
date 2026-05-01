@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { auth, signIn, signOut } from '@/auth';
+import { EditProfilePanel } from '@/components/EditProfilePanel';
 import {
   challengeHref,
   formatFrames,
@@ -31,6 +32,10 @@ export default async function MyDashboardPage() {
   return (
     <div className="space-y-8">
       <Hero profile={profile} />
+      <EditProfilePanel
+        currentName={profile.name}
+        currentAvatarUrl={profile.pictureUrl}
+      />
       {profile.challenges.length === 0 ? (
         <EmptyState />
       ) : (

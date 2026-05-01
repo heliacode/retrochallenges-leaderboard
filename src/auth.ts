@@ -37,6 +37,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: { strategy: 'database' },
+  // Branded sign-in landing page — beats NextAuth's default unstyled
+  // provider list. The page itself bounces already-signed-in users to
+  // the post-auth target so it never shows when it shouldn't.
+  pages: {
+    signIn: '/signin',
+  },
   callbacks: {
     // Surface the user's database id on the session object so server
     // components can call getUserProfile(session.user.id) directly.
