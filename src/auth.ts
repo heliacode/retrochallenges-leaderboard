@@ -14,6 +14,10 @@ import { prisma } from '@/lib/db';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  // Auth.js v5 refuses to handle auth requests when it can't verify the
+  // host (default outside Vercel). We're behind Railway's proxy on the
+  // known NEXTAUTH_URL host, so trust the X-Forwarded-Host header.
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
