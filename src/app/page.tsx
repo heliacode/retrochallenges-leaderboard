@@ -1,88 +1,100 @@
-import Image from 'next/image';
 import Link from 'next/link';
-import {
-  challengeHref,
-  formatFrames,
-  formatRelative,
-  gameHref,
-  getOverallStats,
-  getRecentRuns,
-  listGames,
-  userProfileHref,
-  type GameSummary,
-  type RecentRunEntry,
-} from '@/lib/leaderboard';
+import { headers } from 'next/headers';
+import { CatalogView } from '@/components/CatalogView';
 
-// Skip build-time pre-render — we don't have a DB at build time on Railway.
+// Skip build-time pre-render — we don't have a DB at build time on Railway,
+// and we need to read the request host to decide what to render.
 export const dynamic = 'force-dynamic';
 
+// Hostnames that should still see the catalog at the root URL. Anything
+// else (flawlessnes.com, www.flawlessnes.com, localhost during dev, etc.)
+// gets the marketing landing page. When we cut over fully, remove this
+// list and add a 301 redirect from the legacy host to flawlessnes.com.
+const LEGACY_CATALOG_HOSTS = new Set([
+  'leaderboards.retrochallenges.com',
+]);
+
 export default async function HomePage() {
-  const [stats, games, recent] = await Promise.all([
-    getOverallStats(),
-    listGames(),
-    getRecentRuns(8),
-  ]);
+  const host = (await headers()).get('host') ?? '';
+  // Strip the port for local dev (Next dev server passes "localhost:3000").
+  const hostname = host.split(':')[0].toLowerCase();
+  if (LEGACY_CATALOG_HOSTS.has(hostname)) {
+    return <CatalogView />;
+  }
+  return <LandingPage />;
+}
 
+// ---------------------------------------------------------------------------
+// Landing page (flawlessnes.com)
+// ---------------------------------------------------------------------------
+function LandingPage() {
   return (
-    <div className="space-y-10">
-      <Hero stats={stats} />
-
-      {games.length === 0 ? (
-        <section className="rounded-lg border border-dashed border-slate-700 p-8 text-center">
-          <p className="text-slate-400">
-            No runs submitted yet. Be the first — open the FlawlessNES app and beat a challenge.
-          </p>
-        </section>
-      ) : (
-        <>
-          <GamesSection games={games} />
-          {recent.length > 0 && <RecentActivity runs={recent} />}
-        </>
-      )}
+    <div className="space-y-16">
+      <Hero />
+      <Features />
+      <Creators />
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Sections
-// ---------------------------------------------------------------------------
-
-function Hero({ stats }: { stats: { totalRuns: number; totalPlayers: number; totalChallenges: number } }) {
+function Hero() {
   return (
-    <section>
-      <h1 className="font-display text-3xl font-bold text-white mb-2">Leaderboards</h1>
-      <p className="text-slate-400 mb-5">
-        Community-submitted runs from the FlawlessNES desktop app. Every row is a verified
-        in-emulator completion — scores land here the moment the challenge pings complete.
+    <section className="text-center pt-8">
+      <h1 className="font-display text-4xl sm:text-5xl font-bold text-white tracking-tight">
+        Beat the NES.
+        <br />
+        <span className="text-indigo-300">Prove it.</span>
+      </h1>
+      <p className="mt-5 text-lg text-slate-300 max-w-2xl mx-auto">
+        FlawlessNES turns retro NES games into bite-sized challenges with verified completions
+        and live leaderboards. Run them in BizHawk; your scores ping the board the moment you win.
       </p>
-      <dl className="grid grid-cols-3 gap-3 sm:max-w-md">
-        <Stat label="runs"       value={stats.totalRuns} />
-        <Stat label="players"    value={stats.totalPlayers} />
-        <Stat label="challenges" value={stats.totalChallenges} />
-      </dl>
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <a
+          href="https://github.com/heliacode/RetroChallenges/releases/latest"
+          className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-600 transition-colors"
+        >
+          Download for Windows
+        </a>
+        <Link
+          href="/leaderboards"
+          className="inline-flex items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:border-indigo-500 hover:bg-slate-800 transition-colors"
+        >
+          Browse Leaderboards →
+        </Link>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Sign in with Google coming soon — your stats follow you across desktop and web.
+      </p>
     </section>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-slate-700 bg-slate-900 px-3 py-2">
-      <dt className="text-xs uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="font-display text-2xl font-semibold text-white tabular-nums">
-        {value.toLocaleString()}
-      </dd>
-    </div>
-  );
-}
-
-function GamesSection({ games }: { games: GameSummary[] }) {
+function Features() {
+  const items = [
+    {
+      title: 'Curated NES challenges',
+      body: 'Boss fights, speedruns, score targets, survival gauntlets — each one a tight scenario you can pick up and run in a couple of minutes.',
+    },
+    {
+      title: 'Verified completions',
+      body: 'Win conditions read directly from emulator RAM. No screenshot uploads, no honor system. The challenge fires complete the instant you actually win.',
+    },
+    {
+      title: 'Time-first leaderboards',
+      body: 'Every challenge ranks by completion time. Score breaks ties. The fastest legitimate run wins — no exceptions.',
+    },
+  ];
   return (
     <section>
-      <h2 className="font-display text-xl font-semibold text-white mb-3">Games</h2>
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {games.map((g) => (
-          <li key={g.game}>
-            <GameTile game={g} />
+      <ul className="grid gap-4 sm:grid-cols-3">
+        {items.map((it) => (
+          <li
+            key={it.title}
+            className="rounded-lg border border-slate-700 bg-slate-900 p-5"
+          >
+            <h3 className="font-display text-lg font-semibold text-white">{it.title}</h3>
+            <p className="mt-2 text-sm text-slate-400">{it.body}</p>
           </li>
         ))}
       </ul>
@@ -90,97 +102,30 @@ function GamesSection({ games }: { games: GameSummary[] }) {
   );
 }
 
-function GameTile({ game }: { game: GameSummary }) {
-  return (
-    <Link
-      href={gameHref(game.game)}
-      className="group block rounded-lg border border-slate-700 bg-slate-900 p-5 transition-colors hover:border-indigo-500 hover:bg-slate-800"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
-        <span
-          className="shrink-0 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300"
-          aria-hidden="true"
-        >
-          Browse &rarr;
-        </span>
-      </div>
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <TileStat label="challenges" value={game.totalChallenges} />
-        <TileStat label="runs"       value={game.totalRuns} />
-        <TileStat label="players"    value={game.totalPlayers} />
-      </dl>
-    </Link>
-  );
-}
-
-function TileStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md bg-slate-925 px-2 py-1.5">
-      <dd className="font-mono text-base font-semibold text-slate-100 tabular-nums">
-        {value.toLocaleString()}
-      </dd>
-      <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
-    </div>
-  );
-}
-
-function formatTopMetric(score: number | null, frames: number | null): string {
-  // Prefer score (with time as parenthetical) when both are present, since
-  // score-target challenges share a score across many runs and time is
-  // the meaningful tiebreaker. Time-only challenges show the time alone.
-  if (score != null && frames != null) return `${score.toLocaleString()} · ${formatFrames(frames)}`;
-  if (score != null)                   return score.toLocaleString();
-  if (frames != null)                  return formatFrames(frames);
-  return '—';
-}
-
-function RecentActivity({ runs }: { runs: RecentRunEntry[] }) {
+function Creators() {
+  const channels = [
+    { name: 'slackanater', url: 'https://twitch.tv/slackanater' },
+    { name: 'mattd1980',   url: 'https://twitch.tv/mattd1980' },
+    { name: 'jodosh',      url: 'https://twitch.tv/jodosh' },
+  ];
   return (
     <section>
-      <h2 className="font-display text-xl font-semibold text-white mb-3">Recent activity</h2>
-      <ul className="divide-y divide-slate-800 rounded-lg border border-slate-700 bg-slate-900">
-        {runs.map((r) => (
-          <li key={r.runId} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-            {r.userPictureUrl ? (
-              <Image
-                src={r.userPictureUrl}
-                alt=""
-                width={28}
-                height={28}
-                className="rounded-full shrink-0"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-slate-700 shrink-0" aria-hidden="true" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="text-slate-200 truncate">
-                <Link
-                  href={userProfileHref(r.userId)}
-                  className="font-medium hover:text-indigo-300"
-                >
-                  {r.userName}
-                </Link>
-                <span className="text-slate-500"> finished </span>
-                <Link
-                  href={challengeHref(r.game, r.challengeName)}
-                  className="text-indigo-300 hover:text-indigo-200"
-                >
-                  {r.challengeName}
-                </Link>
-                <span className="text-slate-500"> in </span>
-                <Link href={gameHref(r.game)} className="text-slate-100 hover:text-indigo-300">
-                  {r.game}
-                </Link>
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                {formatTopMetric(r.score, r.completionTimeFrames)}
-                <span className="mx-2">&middot;</span>
-                <time dateTime={new Date(r.serverReceivedAt).toISOString()}>
-                  {formatRelative(new Date(r.serverReceivedAt))}
-                </time>
-              </div>
-            </div>
+      <h2 className="font-display text-xl font-semibold text-white mb-1">Watch the creators live</h2>
+      <p className="text-sm text-slate-400 mb-4">
+        The folks building and breaking these challenges on stream — drop in for a watch.
+      </p>
+      <ul className="grid gap-3 sm:grid-cols-3">
+        {channels.map((c) => (
+          <li key={c.name}>
+            <a
+              href={c.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-200 hover:border-indigo-500 hover:bg-slate-800 transition-colors"
+            >
+              <span className="text-indigo-300 font-medium">twitch.tv/</span>
+              {c.name}
+            </a>
           </li>
         ))}
       </ul>

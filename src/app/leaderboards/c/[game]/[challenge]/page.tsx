@@ -103,7 +103,7 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
 function Breadcrumb({ game, challengeName }: { game: string; challengeName: string }) {
   return (
     <nav className="text-sm text-slate-500">
-      <Link href="/" className="hover:text-slate-300">Leaderboards</Link>
+      <Link href="/leaderboards" className="hover:text-slate-300">Leaderboards</Link>
       <span className="mx-2">/</span>
       <Link href={gameHref(game)} className="text-slate-400 hover:text-slate-200">{game}</Link>
       <span className="mx-2">/</span>
