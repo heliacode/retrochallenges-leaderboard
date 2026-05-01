@@ -30,7 +30,7 @@ export default async function HomePage() {
       {games.length === 0 ? (
         <section className="rounded-lg border border-dashed border-slate-700 p-8 text-center">
           <p className="text-slate-400">
-            No runs submitted yet. Be the first — open the FlawlessNes app and beat a challenge.
+            No runs submitted yet. Be the first — open the FlawlessNES app and beat a challenge.
           </p>
         </section>
       ) : (
@@ -52,7 +52,7 @@ function Hero({ stats }: { stats: { totalRuns: number; totalPlayers: number; tot
     <section>
       <h1 className="font-display text-3xl font-bold text-white mb-2">Leaderboards</h1>
       <p className="text-slate-400 mb-5">
-        Community-submitted runs from the FlawlessNes desktop app. Every row is a verified
+        Community-submitted runs from the FlawlessNES desktop app. Every row is a verified
         in-emulator completion — scores land here the moment the challenge pings complete.
       </p>
       <dl className="grid grid-cols-3 gap-3 sm:max-w-md">
