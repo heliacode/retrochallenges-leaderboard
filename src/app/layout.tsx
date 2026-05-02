@@ -37,6 +37,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         <footer className="border-t border-slate-700 mt-16 py-6 text-center text-xs text-slate-500">
           <span>&copy; 2026 FlawlessNES</span>
+          <span className="mx-3">&middot;</span>
+          <Link href="/releases" className="hover:text-slate-300">Release notes</Link>
         </footer>
       </body>
     </html>
