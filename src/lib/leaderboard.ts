@@ -1,4 +1,5 @@
 import { prisma } from './db';
+import { getGamesManifest } from './challenges-manifest';
 
 // Resolve a user's effective avatar URL: if they uploaded a custom one
 // it lives at /api/users/<id>/avatar, otherwise we fall back to whatever
@@ -234,15 +235,22 @@ export interface GameSummary {
   totalChallenges: number;
   totalRuns: number;
   totalPlayers: number;
+  // Pulled from the assets-repo manifest (boxArtUrl per game). Optional
+  // because not every game ships a box-art URL — game tile renders a
+  // text-only fallback when missing.
+  boxArtUrl?: string;
 }
 
 export async function listGames(): Promise<GameSummary[]> {
-  const games = await prisma.run.groupBy({
-    by: ['game'],
-    where: { hiddenAt: null, user: { bannedAt: null } },
-    _count: { _all: true },
-    orderBy: { game: 'asc' },
-  });
+  const [games, manifest] = await Promise.all([
+    prisma.run.groupBy({
+      by: ['game'],
+      where: { hiddenAt: null, user: { bannedAt: null } },
+      _count: { _all: true },
+      orderBy: { game: 'asc' },
+    }),
+    getGamesManifest(),
+  ]);
   return Promise.all(
     games.map(async (g) => {
       const [challengeRows, playerRows] = await Promise.all([
@@ -257,6 +265,7 @@ export async function listGames(): Promise<GameSummary[]> {
       ]);
       return {
         game: g.game,
+        boxArtUrl: manifest.get(g.game)?.boxArtUrl,
         totalChallenges: challengeRows.length,
         totalRuns: g._count._all,
         totalPlayers: playerRows.length,
