@@ -55,21 +55,23 @@ export async function resolveTargetUserId(
 }
 
 // Admin session gate. Session-based equivalent of the bearer-token
-// admin path — used by the /admin pages and their server actions. The
-// token-based check stays for headless scripts; this one's for the
-// browser flow.
+// admin path — used by the /admin pages and their server actions.
 //
-// Allowlist is hardcoded for now. When we have more than one admin we
-// can pivot to a User.role enum or an env-var-driven list, but adding
-// a second admin is rare enough that hardcoding is the lowest-friction
-// path.
-const ADMIN_EMAILS = new Set<string>([
+// Two ways in:
+//   1. User.isAdmin == true (DB-backed; granted/revoked via /admin/users)
+//   2. Bootstrap allowlist (hardcoded emails)
+//
+// The bootstrap allowlist exists so the very first admin can never be
+// locked out — even if a botched DB write demotes everyone, the
+// hardcoded address still authenticates. Treat ADMIN_BOOTSTRAP_EMAILS
+// as "owners who can always recover the system".
+const ADMIN_BOOTSTRAP_EMAILS = new Set<string>([
   'mdrimonakos@gmail.com',
 ]);
 
-export function isAdminEmail(email: string | null | undefined): boolean {
+export function isBootstrapAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
-  return ADMIN_EMAILS.has(email.toLowerCase());
+  return ADMIN_BOOTSTRAP_EMAILS.has(email.toLowerCase());
 }
 
 // Throws (via Next's notFound()) if the caller isn't a signed-in admin.
@@ -79,9 +81,20 @@ export async function requireAdmin(): Promise<{ userId: string; email: string }>
   const session = await auth();
   const email = session?.user?.email ?? null;
   const userId = session?.user?.id ?? null;
-  if (!userId || !isAdminEmail(email)) {
-    notFound();
+  if (!userId) notFound();
+
+  // Bootstrap path — short-circuit without a DB read.
+  if (isBootstrapAdminEmail(email)) {
+    return { userId, email: email as string };
   }
+
+  // DB-backed path. Single indexed lookup, cheap.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isAdmin: true, bannedAt: true },
+  });
+  if (!user || !user.isAdmin || user.bannedAt) notFound();
+
   return { userId, email: email as string };
 }
 

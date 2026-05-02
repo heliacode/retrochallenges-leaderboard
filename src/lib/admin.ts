@@ -276,6 +276,7 @@ export interface AdminUserRow {
   email: string;
   createdAt: Date;
   bannedAt: Date | null;
+  isAdmin: boolean;
   totalRuns: number;
   lastRunAt: Date | null;
 }
@@ -288,6 +289,7 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
       email: true,
       createdAt: true,
       bannedAt: true,
+      isAdmin: true,
       runs: {
         select: { serverReceivedAt: true },
         orderBy: { serverReceivedAt: 'desc' },
@@ -303,9 +305,85 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
     email: u.email,
     createdAt: u.createdAt,
     bannedAt: u.bannedAt,
+    isAdmin: u.isAdmin,
     totalRuns: u._count.runs,
     lastRunAt: u.runs[0]?.serverReceivedAt ?? null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+export interface AuditRow {
+  id: string;
+  createdAt: Date;
+  actorUserId: string;
+  actorName: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  metadata: unknown;
+}
+
+export async function listAuditLog(opts: {
+  take?: number;
+  skip?: number;
+  actorUserId?: string;
+  action?: string;
+} = {}): Promise<AuditRow[]> {
+  const take = Math.min(opts.take ?? 100, 500);
+  const skip = opts.skip ?? 0;
+  const where: Record<string, unknown> = {};
+  if (opts.actorUserId) where.actorUserId = opts.actorUserId;
+  if (opts.action)      where.action      = opts.action;
+
+  const rows = await prisma.auditLog.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take,
+    skip,
+    include: {
+      actor: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    actorUserId: r.actorUserId,
+    actorName: r.actor?.name ?? '(deleted user)',
+    action: r.action,
+    targetType: r.targetType,
+    targetId: r.targetId,
+    metadata: r.metadata,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Site setting (singleton)
+// ---------------------------------------------------------------------------
+export interface SiteBanner {
+  text: string | null;
+  level: string | null;
+  updatedAt: Date | null;
+  updatedBy: string | null;
+}
+
+export async function getSiteBanner(): Promise<SiteBanner> {
+  // Called from the root layout, which Next sometimes pre-renders for
+  // static pages (e.g. /_not-found). Build environments may not have
+  // DATABASE_URL set; rather than crashing the prerender, we degrade
+  // to "no banner" and the layout renders normally without the bar.
+  try {
+    const row = await prisma.siteSetting.findUnique({ where: { id: 1 } });
+    return {
+      text:      row?.bannerText      ?? null,
+      level:     row?.bannerLevel     ?? null,
+      updatedAt: row?.bannerUpdatedAt ?? null,
+      updatedBy: row?.bannerUpdatedBy ?? null,
+    };
+  } catch {
+    return { text: null, level: null, updatedAt: null, updatedBy: null };
+  }
 }
 
 // ---------------------------------------------------------------------------

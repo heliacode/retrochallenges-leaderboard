@@ -17,6 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <AdminNavLink href="/admin/runs">      Runs        </AdminNavLink>
           <AdminNavLink href="/admin/users">     Users       </AdminNavLink>
           <AdminNavLink href="/admin/challenges">Challenges  </AdminNavLink>
+          <AdminNavLink href="/admin/audit">     Audit log   </AdminNavLink>
+          <AdminNavLink href="/admin/settings">  Settings    </AdminNavLink>
         </nav>
         <div className="mt-6 text-xs text-slate-600">
           Signed in as admin. Public links above the page header still
