@@ -37,6 +37,10 @@ model User {
   // Soft-ban. Banned users' runs are hidden from public leaderboards even
   // if individual runs aren't marked hiddenAt.
   bannedAt   DateTime?
+  // DB-backed admin role. requireAdmin() also honours a hardcoded
+  // bootstrap allowlist so the very first admin can never be locked
+  // out by a botched isAdmin write.
+  isAdmin    Boolean   @default(false)
 
   // NextAuth fields — emailVerified is required by the adapter; we leave
   // it nullable since Google OAuth doesn't reliably populate it.
@@ -49,11 +53,48 @@ model User {
   // a much larger refactor than carrying one extra column.
   image         String?
 
-  runs     Run[]
-  accounts Account[]
-  sessions Session[]
+  runs       Run[]
+  accounts   Account[]
+  sessions   Session[]
+  auditLogs  AuditLog[]   @relation("AuditActor")
 
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Admin moderation paper-trail. Every admin server action writes a row.
+// `targetType` is a free-form string (`run` | `user` | `setting` etc.);
+// `targetId` and `metadata` are optional so we don't have to migrate the
+// table every time a new action shape appears.
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  actor       User     @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId])
+}
+
+// ---------------------------------------------------------------------------
+// Site-wide singleton settings (banner text, future flags). Keyed on
+// id=1 — there's exactly one row, ever. Nullable fields so the page
+// can default-skip rendering when nothing is set.
+// ---------------------------------------------------------------------------
+model SiteSetting {
+  id              Int       @id @default(1)
+  bannerText      String?
+  bannerLevel     String?   // info | warn | success — drives palette
+  bannerUpdatedAt DateTime?
+  bannerUpdatedBy String?
+  updatedAt       DateTime  @updatedAt
 }
 
 // ---------------------------------------------------------------------------

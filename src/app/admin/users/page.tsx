@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import { listAdminUsers } from '@/lib/admin';
 import { userProfileHref } from '@/lib/leaderboard';
-import { banUserAction, unbanUserAction } from '@/app/admin/actions';
+import {
+  banUserAction,
+  unbanUserAction,
+  grantAdminAction,
+  revokeAdminAction,
+} from '@/app/admin/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,8 +69,24 @@ export default async function AdminUsersPage() {
                   {u.bannedAt
                     ? <span className="text-red-400">banned</span>
                     : <span className="text-emerald-300">active</span>}
+                  {u.isAdmin && <span className="ml-2 text-indigo-300">★ admin</span>}
                 </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
+                  {u.isAdmin ? (
+                    <form
+                      action={async () => { 'use server'; await revokeAdminAction(u.id); }}
+                      className="inline mr-1"
+                    >
+                      <ActionButton type="submit" variant="warn">Revoke admin</ActionButton>
+                    </form>
+                  ) : (
+                    <form
+                      action={async () => { 'use server'; await grantAdminAction(u.id); }}
+                      className="inline mr-1"
+                    >
+                      <ActionButton type="submit" variant="ok">Make admin</ActionButton>
+                    </form>
+                  )}
                   {u.bannedAt ? (
                     <form
                       action={async () => { 'use server'; await unbanUserAction(u.id); }}
