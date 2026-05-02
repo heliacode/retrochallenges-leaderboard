@@ -283,6 +283,9 @@ export async function getOverallStats(): Promise<{
 }
 
 // Most recent submissions across all challenges, for the activity feed.
+// `firstEverCompletion`, `personalBest`, and `attemptStreak` are storyline
+// flags the renderer turns into emoji annotations so the feed reads as
+// little narratives rather than an opaque list of times.
 export interface RecentRunEntry {
   runId: string;
   game: string;
@@ -293,7 +296,17 @@ export interface RecentRunEntry {
   userId: string;
   userName: string;
   userPictureUrl: string | null;
+  // True when this run is the first time anyone ever cleared this challenge.
+  firstEverCompletion: boolean;
+  // True when this run is strictly better than every prior run by the same
+  // user on the same challenge (under the time-first / score-tiebreak rule).
+  personalBest: boolean;
+  // Count of THIS user's runs on THIS challenge in the last 60 minutes,
+  // including this row itself. ≥3 reads as "they're hammering at it".
+  attemptStreak: number;
 }
+
+const STREAK_WINDOW_MS = 60 * 60 * 1000;  // 1 hour
 
 export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
   const rows = await prisma.run.findMany({
@@ -302,6 +315,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
     take: limit,
     select: {
       id: true,
+      userId: true,
       game: true,
       challengeName: true,
       score: true,
@@ -310,17 +324,77 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
       user: { select: { id: true, name: true, pictureUrl: true, hasCustomAvatar: true } },
     },
   });
-  return rows.map((r) => ({
-    runId: r.id,
-    game: r.game,
-    challengeName: r.challengeName,
-    score: r.score,
-    completionTimeFrames: r.completionTimeFrames,
-    serverReceivedAt: r.serverReceivedAt,
-    userId: r.user.id,
-    userName: r.user.name,
-    userPictureUrl: effectivePictureUrl(r.user),
-  }));
+
+  // Per-row enrichment: three independent queries fanned out in parallel
+  // for each of the (small) recent set. N+1 with N ≤ ~20 — fine at our
+  // scale; revisit with a window-function aggregation when this hits the
+  // hundreds-of-runs-per-page tier.
+  return Promise.all(
+    rows.map(async (r): Promise<RecentRunEntry> => {
+      const streakSince = new Date(r.serverReceivedAt.getTime() - STREAK_WINDOW_MS);
+
+      const [firstEver, priorBetter, streakCount] = await Promise.all([
+        // Was this the first-ever submission on this (game, challenge)?
+        prisma.run.findFirst({
+          where: {
+            game: r.game,
+            challengeName: r.challengeName,
+            hiddenAt: null,
+            user: { bannedAt: null },
+            serverReceivedAt: { lt: r.serverReceivedAt },
+          },
+          select: { id: true },
+        }),
+        // Did this user have a strictly-better run on this challenge BEFORE
+        // this one? Time-first comparison; null ranks worse than any number.
+        prisma.run.findFirst({
+          where: {
+            userId: r.userId,
+            game: r.game,
+            challengeName: r.challengeName,
+            hiddenAt: null,
+            serverReceivedAt: { lt: r.serverReceivedAt },
+          },
+          orderBy: [
+            { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+            { score: { sort: 'desc', nulls: 'last' } },
+          ],
+          select: { score: true, completionTimeFrames: true },
+        }),
+        // How many runs has this user had on this challenge within the last
+        // hour, including this one?
+        prisma.run.count({
+          where: {
+            userId: r.userId,
+            game: r.game,
+            challengeName: r.challengeName,
+            hiddenAt: null,
+            serverReceivedAt: { gte: streakSince, lte: r.serverReceivedAt },
+          },
+        }),
+      ]);
+
+      const personalBest = !priorBetter || isBetterRun(
+        { score: r.score, completionTimeFrames: r.completionTimeFrames },
+        priorBetter,
+      );
+
+      return {
+        runId: r.id,
+        game: r.game,
+        challengeName: r.challengeName,
+        score: r.score,
+        completionTimeFrames: r.completionTimeFrames,
+        serverReceivedAt: r.serverReceivedAt,
+        userId: r.user.id,
+        userName: r.user.name,
+        userPictureUrl: effectivePictureUrl(r.user),
+        firstEverCompletion: !firstEver,
+        personalBest,
+        attemptStreak: streakCount,
+      };
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
