@@ -136,6 +136,8 @@ function ChallengeCard({ summary }: { summary: ChallengeSummary }) {
         <div className="min-w-0">
           <div className="font-medium text-slate-100 truncate">{summary.challengeName}</div>
           <div className="text-xs text-slate-500 mt-0.5">
+            {summary.playerCount} player{summary.playerCount === 1 ? '' : 's'}
+            <span className="mx-1.5">&middot;</span>
             {summary.runCount} run{summary.runCount === 1 ? '' : 's'}
           </div>
         </div>

@@ -173,6 +173,7 @@ export interface ChallengeSummary {
   game: string;
   challengeName: string;
   runCount: number;
+  playerCount: number;
   topRun: LeaderboardEntry | null;
 }
 
@@ -190,16 +191,29 @@ export async function listChallengeSummaries(game?: string): Promise<ChallengeSu
     _count: { _all: true },
     orderBy: [{ game: 'asc' }, { challengeName: 'asc' }],
   });
-  // N+1 with N small (one query per challenge for its rank-1 row). Fine
-  // at our scale (single-digit challenges); revisit with a single window
-  // function query if the catalog grows beyond ~50.
+  // N+1 with N small (two queries per challenge — rank-1 row + distinct-
+  // userId count for the "X players" stat). Fine at our scale (single-
+  // digit challenges); revisit with a single window-function query if the
+  // catalog grows beyond ~50.
   return Promise.all(
     groups.map(async (g) => {
-      const top = await getChallengeLeaderboard(g.game, g.challengeName, 1);
+      const [top, playerGroups] = await Promise.all([
+        getChallengeLeaderboard(g.game, g.challengeName, 1),
+        prisma.run.groupBy({
+          by: ['userId'],
+          where: {
+            game: g.game,
+            challengeName: g.challengeName,
+            hiddenAt: null,
+            user: { bannedAt: null },
+          },
+        }),
+      ]);
       return {
         game: g.game,
         challengeName: g.challengeName,
         runCount: g._count._all,
+        playerCount: playerGroups.length,
         topRun: top[0] ?? null,
       };
     }),
