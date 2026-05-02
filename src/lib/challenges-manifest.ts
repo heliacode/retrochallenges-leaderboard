@@ -19,6 +19,8 @@ interface RawManifestChallenge {
 }
 interface RawManifestGame {
   name: string;
+  description?: string;
+  boxArtUrl?: string;
   challenges: RawManifestChallenge[];
 }
 interface RawManifest {
@@ -32,17 +34,28 @@ export interface ChallengeMeta {
   difficulty?: string;
 }
 
+export interface GameMeta {
+  game: string;
+  description?: string;
+  boxArtUrl?: string;
+}
+
+export interface ParsedManifest {
+  challenges: Map<string, ChallengeMeta>;
+  games: Map<string, GameMeta>;
+}
+
 // Map key: `${game}::${challengeName}`. Identical key shape used elsewhere
 // in the app for (game, challenge) tuples — see UserProfile aggregation.
 export function manifestKey(game: string, challengeName: string): string {
   return `${game}::${challengeName}`;
 }
 
-let cache: { meta: Map<string, ChallengeMeta>; expiresAt: number } | null = null;
+let cache: { parsed: ParsedManifest; expiresAt: number } | null = null;
 
-export async function getChallengesManifest(): Promise<Map<string, ChallengeMeta>> {
+async function loadManifest(): Promise<ParsedManifest> {
   const now = Date.now();
-  if (cache && now < cache.expiresAt) return cache.meta;
+  if (cache && now < cache.expiresAt) return cache.parsed;
 
   try {
     const res = await fetch(MANIFEST_URL, {
@@ -51,31 +64,47 @@ export async function getChallengesManifest(): Promise<Map<string, ChallengeMeta
     });
     if (!res.ok) throw new Error(`manifest fetch ${res.status}`);
     const data = (await res.json()) as RawManifest;
-    const meta = parseManifest(data);
-    cache = { meta, expiresAt: now + TTL_MS };
-    return meta;
+    const parsed = parseManifest(data);
+    cache = { parsed, expiresAt: now + TTL_MS };
+    return parsed;
   } catch (err) {
     console.warn(
       '[manifest] fetch failed, serving',
-      cache ? 'stale cache' : 'empty map',
+      cache ? 'stale cache' : 'empty maps',
       ':',
       (err as Error).message,
     );
     // Serve stale rather than empty if we ever had a successful fetch —
     // an outage shouldn't make the navigation regress to flat lists.
-    return cache?.meta ?? new Map();
+    return cache?.parsed ?? { challenges: new Map(), games: new Map() };
   }
 }
 
+export async function getChallengesManifest(): Promise<Map<string, ChallengeMeta>> {
+  return (await loadManifest()).challenges;
+}
+
+export async function getGamesManifest(): Promise<Map<string, GameMeta>> {
+  return (await loadManifest()).games;
+}
+
 // Pure transform — exported so tests can hit it without touching fetch.
-export function parseManifest(data: RawManifest): Map<string, ChallengeMeta> {
-  const out = new Map<string, ChallengeMeta>();
-  if (!data || !Array.isArray(data.games)) return out;
+// Returns both per-challenge AND per-game maps in one pass through the
+// raw manifest tree.
+export function parseManifest(data: RawManifest): ParsedManifest {
+  const challenges = new Map<string, ChallengeMeta>();
+  const games      = new Map<string, GameMeta>();
+  if (!data || !Array.isArray(data.games)) return { challenges, games };
   for (const g of data.games) {
     if (!g || typeof g.name !== 'string' || !Array.isArray(g.challenges)) continue;
+    games.set(g.name, {
+      game: g.name,
+      description: typeof g.description === 'string' ? g.description : undefined,
+      boxArtUrl: typeof g.boxArtUrl === 'string' ? g.boxArtUrl : undefined,
+    });
     for (const c of g.challenges) {
       if (!c || typeof c.name !== 'string') continue;
-      out.set(manifestKey(g.name, c.name), {
+      challenges.set(manifestKey(g.name, c.name), {
         game: g.name,
         challengeName: c.name,
         category: c.category,
@@ -83,7 +112,7 @@ export function parseManifest(data: RawManifest): Map<string, ChallengeMeta> {
       });
     }
   }
-  return out;
+  return { challenges, games };
 }
 
 // ---------------------------------------------------------------------------

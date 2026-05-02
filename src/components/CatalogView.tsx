@@ -101,22 +101,42 @@ function GameTile({ game }: { game: GameSummary }) {
   return (
     <Link
       href={gameHref(game.game)}
-      className="group block rounded-lg border border-slate-700 bg-slate-900 p-5 transition-colors hover:border-indigo-500 hover:bg-slate-800"
+      className="group flex gap-3 rounded-lg border border-slate-700 bg-slate-900 p-4 transition-colors hover:border-indigo-500 hover:bg-slate-800"
     >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
-        <span
-          className="shrink-0 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300"
+      {/* Box art on the left — fixed 48×64 (3:4 NES box ratio). The
+          fixed slot keeps the tile size identical whether or not the
+          game ships a boxArtUrl; missing art renders the placeholder. */}
+      {game.boxArtUrl ? (
+        <Image
+          src={game.boxArtUrl}
+          alt=""
+          width={48}
+          height={64}
+          unoptimized
+          className="shrink-0 self-center h-16 w-12 rounded border border-slate-700 object-cover"
+        />
+      ) : (
+        <div
+          className="shrink-0 self-center h-16 w-12 rounded border border-slate-700 bg-slate-800"
           aria-hidden="true"
-        >
-          Browse &rarr;
-        </span>
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
+          <span
+            className="shrink-0 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300"
+            aria-hidden="true"
+          >
+            Browse &rarr;
+          </span>
+        </div>
+        <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+          <TileStat label="challenges" value={game.totalChallenges} />
+          <TileStat label="runs"       value={game.totalRuns} />
+          <TileStat label="players"    value={game.totalPlayers} />
+        </dl>
       </div>
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <TileStat label="challenges" value={game.totalChallenges} />
-        <TileStat label="runs"       value={game.totalRuns} />
-        <TileStat label="players"    value={game.totalPlayers} />
-      </dl>
     </Link>
   );
 }

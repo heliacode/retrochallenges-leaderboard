@@ -7,11 +7,11 @@ import {
 } from '../src/lib/challenges-manifest';
 
 describe('parseManifest', () => {
-  test('empty / null / malformed input returns empty map', () => {
-    expect(parseManifest(undefined as unknown as { games: never[] }).size).toBe(0);
-    expect(parseManifest(null as unknown as { games: never[] }).size).toBe(0);
-    expect(parseManifest({} as unknown as { games: never[] }).size).toBe(0);
-    expect(parseManifest({ games: 'not an array' } as unknown as { games: never[] }).size).toBe(0);
+  test('empty / null / malformed input returns empty maps', () => {
+    expect(parseManifest(undefined as unknown as { games: never[] }).challenges.size).toBe(0);
+    expect(parseManifest(null as unknown as { games: never[] }).challenges.size).toBe(0);
+    expect(parseManifest({} as unknown as { games: never[] }).challenges.size).toBe(0);
+    expect(parseManifest({ games: 'not an array' } as unknown as { games: never[] }).challenges.size).toBe(0);
   });
 
   test('skips games / challenges with missing or wrong-typed names', () => {
@@ -23,8 +23,8 @@ describe('parseManifest', () => {
         null as unknown as { name: string; challenges: never[] },
       ],
     });
-    expect(m.size).toBe(1);
-    expect(m.get('OK::Real')?.category).toBe('boss');
+    expect(m.challenges.size).toBe(1);
+    expect(m.challenges.get('OK::Real')?.category).toBe('boss');
   });
 
   test('round-trips category and difficulty', () => {
@@ -39,24 +39,51 @@ describe('parseManifest', () => {
         },
       ],
     });
-    expect(m.size).toBe(2);
-    expect(m.get(manifestKey('Castlevania', 'Phantom Bat'))).toEqual({
+    expect(m.challenges.size).toBe(2);
+    expect(m.challenges.get(manifestKey('Castlevania', 'Phantom Bat'))).toEqual({
       game: 'Castlevania',
       challengeName: 'Phantom Bat',
       category: 'boss',
       difficulty: 'Medium',
     });
-    expect(m.get(manifestKey('Castlevania', 'Get 5000 points!'))?.category).toBe('score');
+    expect(m.challenges.get(manifestKey('Castlevania', 'Get 5000 points!'))?.category).toBe('score');
   });
 
   test('absent category / difficulty stays undefined (not coerced to empty string)', () => {
     const m = parseManifest({
       games: [{ name: 'X', challenges: [{ name: 'Y' }] }],
     });
-    const meta = m.get(manifestKey('X', 'Y'));
+    const meta = m.challenges.get(manifestKey('X', 'Y'));
     expect(meta).toBeDefined();
     expect(meta?.category).toBeUndefined();
     expect(meta?.difficulty).toBeUndefined();
+  });
+
+  test('extracts per-game boxArtUrl / description into the games map', () => {
+    const m = parseManifest({
+      games: [
+        {
+          name: 'Castlevania',
+          description: 'Vampires!',
+          boxArtUrl: 'https://example.com/cv.png',
+          challenges: [{ name: 'Phantom Bat' }],
+        },
+        // game without boxArtUrl: still appears in the map, just with
+        // boxArtUrl undefined — game tile renders the no-art fallback.
+        { name: 'Mystery', challenges: [{ name: 'X' }] },
+      ],
+    });
+    expect(m.games.size).toBe(2);
+    expect(m.games.get('Castlevania')).toEqual({
+      game: 'Castlevania',
+      description: 'Vampires!',
+      boxArtUrl: 'https://example.com/cv.png',
+    });
+    expect(m.games.get('Mystery')).toEqual({
+      game: 'Mystery',
+      description: undefined,
+      boxArtUrl: undefined,
+    });
   });
 });
 
