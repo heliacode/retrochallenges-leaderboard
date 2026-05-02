@@ -1,5 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { auth } from '@/auth';
+import { prisma } from '@/lib/db';
 import {
   gameHref,
   getChallengeLeaderboard,
@@ -26,7 +28,26 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
   const activeWindow = parseLeaderboardWindow(sp.window);
   const activeView = parseLeaderboardView(sp.view);
 
-  const entries = await getChallengeLeaderboard(game, challengeName, 50, activeWindow, activeView);
+  // Three parallel reads: the leaderboard rows, the signed-in user (so we
+  // can highlight "you"), and the chronologically-first completer of this
+  // challenge (so they get a 🥇 trophy regardless of current rank — risk-
+  // taker recognition that persists even if they later get out-run).
+  const [entries, session, firstEverCompleter] = await Promise.all([
+    getChallengeLeaderboard(game, challengeName, 50, activeWindow, activeView),
+    auth(),
+    prisma.run.findFirst({
+      where: {
+        game,
+        challengeName,
+        hiddenAt: null,
+        user: { bannedAt: null },
+      },
+      orderBy: { serverReceivedAt: 'asc' },
+      select: { userId: true },
+    }),
+  ]);
+  const meId = session?.user?.id ?? null;
+  const firstEverUserId = firstEverCompleter?.userId ?? null;
 
   return (
     <div>
@@ -59,39 +80,65 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
               </tr>
             </thead>
             <tbody>
-              {entries.map((e) => (
-                <tr key={e.runId} className="border-b border-slate-800">
-                  <td className="py-2 pr-2 text-slate-500 font-mono">{e.rank}</td>
-                  <td className="py-2 pr-2">
-                    <Link
-                      href={userProfileHref(e.userId)}
-                      className="flex items-center gap-2 group"
-                    >
-                      {e.userPictureUrl ? (
-                        <Image
-                          src={e.userPictureUrl}
-                          alt=""
-                          width={24}
-                          height={24}
-                          className="rounded-full"
-                        />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-slate-700" aria-hidden="true" />
-                      )}
-                      <span className="text-slate-200 group-hover:text-indigo-300">{e.userName}</span>
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-2 text-right font-mono text-slate-200">
-                    {e.score != null ? e.score.toLocaleString() : '—'}
-                  </td>
-                  <td className="py-2 pr-2 text-right font-mono text-slate-200">
-                    {formatFrames(e.completionTimeFrames)}
-                  </td>
-                  <td className="py-2 pr-2 text-right text-xs text-slate-500 hidden sm:table-cell">
-                    {new Date(e.serverReceivedAt).toLocaleDateString()}
-                  </td>
-                </tr>
-              ))}
+              {entries.map((e) => {
+                const isMe          = meId !== null && e.userId === meId;
+                const isFirstEver   = firstEverUserId !== null && e.userId === firstEverUserId;
+                // Highlight class: subtle indigo wash on the row background
+                // + a left accent border. Falls back to the standard divider
+                // when this isn't the signed-in user's row.
+                const rowClass = isMe
+                  ? 'border-b border-slate-800 bg-indigo-500/10 ring-inset ring-1 ring-indigo-500/30'
+                  : 'border-b border-slate-800';
+                return (
+                  <tr key={e.runId} className={rowClass}>
+                    <td className="py-2 pr-2 text-slate-500 font-mono">{e.rank}</td>
+                    <td className="py-2 pr-2">
+                      <Link
+                        href={userProfileHref(e.userId)}
+                        className="flex items-center gap-2 group"
+                      >
+                        {e.userPictureUrl ? (
+                          <Image
+                            src={e.userPictureUrl}
+                            alt=""
+                            width={24}
+                            height={24}
+                            className="rounded-full"
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-700" aria-hidden="true" />
+                        )}
+                        <span className={isMe ? 'text-indigo-200 font-semibold group-hover:text-indigo-100' : 'text-slate-200 group-hover:text-indigo-300'}>
+                          {e.userName}
+                        </span>
+                        {isMe && (
+                          <span className="text-xs font-medium text-indigo-300/80" aria-label="this is you">
+                            (you)
+                          </span>
+                        )}
+                        {isFirstEver && (
+                          <span
+                            className="text-amber-300"
+                            title="First-ever completion of this challenge"
+                            aria-label="first-ever completion"
+                          >
+                            🥇
+                          </span>
+                        )}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-2 text-right font-mono text-slate-200">
+                      {e.score != null ? e.score.toLocaleString() : '—'}
+                    </td>
+                    <td className="py-2 pr-2 text-right font-mono text-slate-200">
+                      {formatFrames(e.completionTimeFrames)}
+                    </td>
+                    <td className="py-2 pr-2 text-right text-xs text-slate-500 hidden sm:table-cell">
+                      {new Date(e.serverReceivedAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
