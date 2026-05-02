@@ -147,7 +147,7 @@ function TileStat({ label, value }: { label: string; value: number }) {
       <dd className="font-mono text-base font-semibold text-slate-100 tabular-nums">
         {value.toLocaleString()}
       </dd>
-      <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
+      <dt className="text-[9px] uppercase text-slate-500 truncate">{label}</dt>
     </div>
   );
 }
