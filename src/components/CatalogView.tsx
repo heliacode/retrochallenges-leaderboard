@@ -14,14 +14,14 @@ import {
 } from '@/lib/leaderboard';
 import { AutoRefresh } from '@/components/AutoRefresh';
 
-// Hero + recent-activity feed + game-tile grid. Rendered by both the
+// Hero + game-tile grid + recent-activity feed. Rendered by both the
 // /leaderboards route and the host-aware / route (when served from
 // the legacy leaderboards.retrochallenges.com hostname) so users hit
 // the same UI either way during the flawlessnes.com transition.
 //
-// The feed sits above the game grid because that's the dynamic /
-// addictive part — visitors come back to see what just happened, not
-// to re-browse the same games. AutoRefresh re-pulls every 30s.
+// Games come first (catalog is the action surface — visitors are here
+// to pick something to play), recent activity is the addictive scroll
+// underneath. AutoRefresh re-pulls every 30s either way.
 export async function CatalogView() {
   const [stats, games, recent] = await Promise.all([
     getOverallStats(),
@@ -42,8 +42,8 @@ export async function CatalogView() {
         </section>
       ) : (
         <>
-          {recent.length > 0 && <RecentActivity runs={recent} />}
           <GamesSection games={games} />
+          {recent.length > 0 && <RecentActivity runs={recent} />}
         </>
       )}
     </div>
