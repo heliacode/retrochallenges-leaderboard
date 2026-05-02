@@ -12,20 +12,26 @@ import {
   type GameSummary,
   type RecentRunEntry,
 } from '@/lib/leaderboard';
+import { AutoRefresh } from '@/components/AutoRefresh';
 
-// Hero + game-tile grid + recent-activity feed. Rendered by both the
+// Hero + recent-activity feed + game-tile grid. Rendered by both the
 // /leaderboards route and the host-aware / route (when served from
 // the legacy leaderboards.retrochallenges.com hostname) so users hit
 // the same UI either way during the flawlessnes.com transition.
+//
+// The feed sits above the game grid because that's the dynamic /
+// addictive part — visitors come back to see what just happened, not
+// to re-browse the same games. AutoRefresh re-pulls every 30s.
 export async function CatalogView() {
   const [stats, games, recent] = await Promise.all([
     getOverallStats(),
     listGames(),
-    getRecentRuns(8),
+    getRecentRuns(20),
   ]);
 
   return (
     <div className="space-y-10">
+      <AutoRefresh intervalMs={30000} />
       <Hero stats={stats} />
 
       {games.length === 0 ? (
@@ -36,8 +42,8 @@ export async function CatalogView() {
         </section>
       ) : (
         <>
-          <GamesSection games={games} />
           {recent.length > 0 && <RecentActivity runs={recent} />}
+          <GamesSection games={games} />
         </>
       )}
     </div>
@@ -173,6 +179,7 @@ function RecentActivity({ runs }: { runs: RecentRunEntry[] }) {
                 <Link href={gameHref(r.game)} className="text-slate-100 hover:text-indigo-300">
                   {r.game}
                 </Link>
+                <ActivityAnnotations run={r} />
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
                 {formatTopMetric(r.score, r.completionTimeFrames)}
@@ -187,4 +194,51 @@ function RecentActivity({ runs }: { runs: RecentRunEntry[] }) {
       </ul>
     </section>
   );
+}
+
+// Tiny inline annotations rendered after the run sentence. Quiet most of
+// the time; lights up when something narratively interesting happened.
+// Order: most prestigious first (first-ever), then PB, then "they're
+// grinding" — keeps the eye-grabbing badges to the left.
+function ActivityAnnotations({ run }: { run: RecentRunEntry }) {
+  return (
+    <>
+      {run.firstEverCompletion && (
+        <span
+          title="First-ever completion of this challenge"
+          className="ml-1.5 text-amber-300"
+          aria-label="first-ever completion"
+        >
+          🥇
+        </span>
+      )}
+      {run.personalBest && !run.firstEverCompletion && (
+        <span
+          title="Personal best on this challenge"
+          className="ml-1.5 text-emerald-300"
+          aria-label="personal best"
+        >
+          🏆
+        </span>
+      )}
+      {run.attemptStreak >= 3 && (
+        <span
+          title={`${run.userName}'s ${ordinal(run.attemptStreak)} attempt on this challenge in the last hour`}
+          className="ml-1.5 text-xs font-medium text-orange-300 bg-orange-500/10 rounded px-1.5 py-0.5 align-middle"
+        >
+          🔁 {run.attemptStreak}× in 1h
+        </span>
+      )}
+    </>
+  );
+}
+
+function ordinal(n: number): string {
+  const last = n % 10;
+  const teen = Math.floor(n / 10) % 10 === 1;
+  if (teen)            return `${n}th`;
+  if (last === 1)      return `${n}st`;
+  if (last === 2)      return `${n}nd`;
+  if (last === 3)      return `${n}rd`;
+  return `${n}th`;
 }
