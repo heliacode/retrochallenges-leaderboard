@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 
@@ -51,6 +52,37 @@ export async function resolveTargetUserId(
     select: { id: true },
   });
   return user?.id ?? null;
+}
+
+// Admin session gate. Session-based equivalent of the bearer-token
+// admin path — used by the /admin pages and their server actions. The
+// token-based check stays for headless scripts; this one's for the
+// browser flow.
+//
+// Allowlist is hardcoded for now. When we have more than one admin we
+// can pivot to a User.role enum or an env-var-driven list, but adding
+// a second admin is rare enough that hardcoding is the lowest-friction
+// path.
+const ADMIN_EMAILS = new Set<string>([
+  'mdrimonakos@gmail.com',
+]);
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.has(email.toLowerCase());
+}
+
+// Throws (via Next's notFound()) if the caller isn't a signed-in admin.
+// notFound() pretends the page doesn't exist rather than 401-ing — keeps
+// the admin URL invisible to anyone fishing for it.
+export async function requireAdmin(): Promise<{ userId: string; email: string }> {
+  const session = await auth();
+  const email = session?.user?.email ?? null;
+  const userId = session?.user?.id ?? null;
+  if (!userId || !isAdminEmail(email)) {
+    notFound();
+  }
+  return { userId, email: email as string };
 }
 
 export function verifyAdminToken(headerValue: string | null | undefined): boolean {
