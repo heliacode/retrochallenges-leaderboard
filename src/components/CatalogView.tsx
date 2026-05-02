@@ -122,15 +122,7 @@ function GameTile({ game }: { game: GameSummary }) {
         />
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
-          <span
-            className="shrink-0 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-medium text-indigo-300"
-            aria-hidden="true"
-          >
-            Browse &rarr;
-          </span>
-        </div>
+        <h3 className="font-display text-lg font-semibold text-white truncate">{game.game}</h3>
         <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
           <TileStat label="challenges" value={game.totalChallenges} />
           <TileStat label="runs"       value={game.totalRuns} />
