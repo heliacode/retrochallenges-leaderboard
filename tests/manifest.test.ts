@@ -59,6 +59,47 @@ describe('parseManifest', () => {
     expect(meta?.difficulty).toBeUndefined();
   });
 
+  test('parses anti-cheat thresholds when present', () => {
+    const m = parseManifest({
+      games: [{
+        name: 'CV',
+        challenges: [{
+          name: 'Bat',
+          minPlausibleFrames: 600,
+          flagBelowFrames: 1500,
+        }],
+      }],
+    });
+    const meta = m.challenges.get(manifestKey('CV', 'Bat'));
+    expect(meta?.minPlausibleFrames).toBe(600);
+    expect(meta?.flagBelowFrames).toBe(1500);
+  });
+
+  test('anti-cheat thresholds are undefined when manifest omits them (fail-open)', () => {
+    const m = parseManifest({
+      games: [{ name: 'CV', challenges: [{ name: 'Bat' }] }],
+    });
+    const meta = m.challenges.get(manifestKey('CV', 'Bat'));
+    expect(meta?.minPlausibleFrames).toBeUndefined();
+    expect(meta?.flagBelowFrames).toBeUndefined();
+  });
+
+  test('non-numeric anti-cheat thresholds are ignored (treated as missing)', () => {
+    const m = parseManifest({
+      games: [{
+        name: 'CV',
+        challenges: [{
+          name: 'Bat',
+          minPlausibleFrames: 'not a number' as unknown as number,
+          flagBelowFrames: null as unknown as number,
+        }],
+      }],
+    });
+    const meta = m.challenges.get(manifestKey('CV', 'Bat'));
+    expect(meta?.minPlausibleFrames).toBeUndefined();
+    expect(meta?.flagBelowFrames).toBeUndefined();
+  });
+
   test('extracts per-game boxArtUrl / description into the games map', () => {
     const m = parseManifest({
       games: [

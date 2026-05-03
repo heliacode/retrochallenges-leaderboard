@@ -6,7 +6,9 @@ import { RefreshOnFocus } from '@/components/RefreshOnFocus';
 import {
   challengeHref,
   formatFrames,
+  getMyPendingRuns,
   getUserProfile,
+  type MyPendingRun,
   type UserProfile,
   type UserProfileChallenge,
 } from '@/lib/leaderboard';
@@ -23,7 +25,10 @@ export default async function MyDashboardPage() {
     return <SignedOut />;
   }
 
-  const profile = await getUserProfile(session.user.id);
+  const [profile, pending] = await Promise.all([
+    getUserProfile(session.user.id),
+    getMyPendingRuns(session.user.id),
+  ]);
   if (!profile) {
     // Session exists but user record is gone (e.g., admin-deleted between
     // sign-in and now). Treat as signed-out rather than crashing.
@@ -38,12 +43,48 @@ export default async function MyDashboardPage() {
         currentName={profile.name}
         currentAvatarUrl={profile.pictureUrl}
       />
+      {pending.length > 0 && <PendingPanel rows={pending} />}
       {profile.challenges.length === 0 ? (
         <EmptyState />
       ) : (
         <ChallengeTable rows={profile.challenges} />
       )}
     </div>
+  );
+}
+
+// Surfaces this user's own runs that are sitting in the anti-cheat review
+// queue. Hidden from the public leaderboards but the player should know
+// the submission landed; otherwise a fast run that vanishes feels like
+// data loss.
+function PendingPanel({ rows }: { rows: MyPendingRun[] }) {
+  return (
+    <section className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-4">
+      <h2 className="font-display text-lg font-semibold text-amber-100">
+        {rows.length} run{rows.length === 1 ? '' : 's'} pending review
+      </h2>
+      <p className="text-xs text-amber-200/80 mt-1 mb-3">
+        Submitted, but the time was fast enough to trigger an automatic
+        review. An admin will approve or reject shortly — runs published
+        from the queue retroactively count for the leaderboard.
+      </p>
+      <ul className="space-y-1 text-sm">
+        {rows.map((r) => (
+          <li key={r.runId} className="flex items-center justify-between gap-3">
+            <Link
+              href={challengeHref(r.game, r.challengeName)}
+              className="truncate text-amber-100 hover:text-white"
+            >
+              {r.game} — {r.challengeName}
+            </Link>
+            <span className="shrink-0 font-mono text-xs text-amber-200 tabular-nums">
+              {formatFrames(r.completionTimeFrames)}
+              {r.score != null && ` · ${r.score.toLocaleString()} pts`}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

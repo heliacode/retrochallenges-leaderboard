@@ -163,6 +163,14 @@ model Run {
   hiddenAt             DateTime?
   hiddenReason         String?
 
+  // Anti-cheat review queue. The submit endpoint sets this to true when
+  // a run's completionTimeFrames falls below the challenge's
+  // flagBelowFrames threshold (suspiciously fast but not impossible).
+  // Pending runs are hidden from public leaderboards but still visible
+  // to the owner on /me with a "pending review" badge so they know it
+  // wasn't lost. An admin clears it via /admin/pending.
+  pendingReview        Boolean   @default(false)
+
   // Full original payload, kept for debugging and future replay support.
   rawPayload           Json
 
@@ -171,4 +179,5 @@ model Run {
   @@index([game, challengeName, score(sort: Desc), completionTimeFrames(sort: Asc)])
   @@index([userId, serverReceivedAt(sort: Desc)])
   @@index([hiddenAt])
+  @@index([pendingReview])
 }

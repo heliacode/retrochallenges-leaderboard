@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { verifySubmissionSecret } from '@/lib/auth';
 import { isBetterRun, getChallengeLeaderboard, challengeHref } from '@/lib/leaderboard';
 import { notifyDiscordTopPlacement } from '@/lib/discord';
+import { getChallengeAntiCheatThresholds } from '@/lib/challenges-manifest';
 
 // Runtime schema for the submission payload. Matches the shape written
 // by RC.report_completion + the caller-supplied user identity pulled
@@ -57,6 +58,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 2b. Anti-cheat screening. Per-challenge thresholds in the manifest:
+  //     - completionTimeFrames < minPlausibleFrames → outright reject (impossible)
+  //     - completionTimeFrames < flagBelowFrames    → insert with pendingReview=true
+  //     A challenge with no thresholds skips screening (fail-open).
+  let pendingReview = false;
+  if (s.completionTimeFrames != null) {
+    const thresholds = await getChallengeAntiCheatThresholds(s.game, s.challengeName);
+    if (thresholds.minPlausibleFrames != null && s.completionTimeFrames < thresholds.minPlausibleFrames) {
+      return NextResponse.json(
+        {
+          error: 'implausible_time',
+          detail: `completionTimeFrames=${s.completionTimeFrames} is below minPlausibleFrames=${thresholds.minPlausibleFrames}`,
+        },
+        { status: 400 },
+      );
+    }
+    if (thresholds.flagBelowFrames != null && s.completionTimeFrames < thresholds.flagBelowFrames) {
+      pendingReview = true;
+    }
+  }
+
   // 3. Upsert user, insert run. Runs into the same User row on every
   //    submission from the same Google identity, keeping profile data fresh.
   try {
@@ -77,13 +99,15 @@ export async function POST(req: NextRequest) {
 
     // Look up the user's previous best on this challenge BEFORE the
     // insert so the new run isn't compared against itself. Same sort
-    // order the public leaderboard uses.
+    // order the public leaderboard uses. Pending runs aren't counted —
+    // a flagged time shouldn't masquerade as the user's PB until cleared.
     const priorBestRow = await prisma.run.findFirst({
       where: {
         userId: user.id,
         game: s.game,
         challengeName: s.challengeName,
         hiddenAt: null,
+        pendingReview: false,
       },
       orderBy: [
         { score: { sort: 'desc', nulls: 'last' } },
@@ -100,39 +124,47 @@ export async function POST(req: NextRequest) {
         score: s.score ?? null,
         completionTimeFrames: s.completionTimeFrames ?? null,
         clientReportedAt: s.clientReportedAt ? new Date(s.clientReportedAt) : null,
+        pendingReview,
         rawPayload: raw as object,
       },
     });
 
-    // First-ever run for this (user, challenge) is always a personal best.
-    const personalBest = !priorBestRow || isBetterRun(
-      { score: run.score, completionTimeFrames: run.completionTimeFrames },
-      priorBestRow,
-    );
+    // PB + Discord notification only fire if the run isn't pending review.
+    // A flagged run shouldn't claim a podium spot or trigger a celebration
+    // until an admin clears it.
+    const personalBest =
+      !pendingReview &&
+      (!priorBestRow ||
+        isBetterRun(
+          { score: run.score, completionTimeFrames: run.completionTimeFrames },
+          priorBestRow,
+        ));
 
-    // If the new run lands in the top 3 for the challenge, fire a
-    // Discord webhook (fire-and-forget; won't delay the API response,
-    // never blocks the success path).
-    void (async () => {
-      try {
-        const top3 = await getChallengeLeaderboard(s.game, s.challengeName, 3);
-        const idx = top3.findIndex((entry) => entry.runId === run.id);
-        if (idx === -1) return;  // not top 3, nothing to celebrate
-        const origin = req.nextUrl.origin;
-        await notifyDiscordTopPlacement({
-          rank: idx + 1,
-          playerName: user.name,
-          playerAvatarUrl: user.pictureUrl,
-          game: s.game,
-          challengeName: s.challengeName,
-          score: run.score,
-          completionTimeFrames: run.completionTimeFrames,
-          publicHref: `${origin}${challengeHref(s.game, s.challengeName)}`,
-        });
-      } catch (err) {
-        console.error('top-placement notification failed:', err);
-      }
-    })();
+    if (!pendingReview) {
+      // If the new run lands in the top 3 for the challenge, fire a
+      // Discord webhook (fire-and-forget; won't delay the API response,
+      // never blocks the success path).
+      void (async () => {
+        try {
+          const top3 = await getChallengeLeaderboard(s.game, s.challengeName, 3);
+          const idx = top3.findIndex((entry) => entry.runId === run.id);
+          if (idx === -1) return;  // not top 3, nothing to celebrate
+          const origin = req.nextUrl.origin;
+          await notifyDiscordTopPlacement({
+            rank: idx + 1,
+            playerName: user.name,
+            playerAvatarUrl: user.pictureUrl,
+            game: s.game,
+            challengeName: s.challengeName,
+            score: run.score,
+            completionTimeFrames: run.completionTimeFrames,
+            publicHref: `${origin}${challengeHref(s.game, s.challengeName)}`,
+          });
+        } catch (err) {
+          console.error('top-placement notification failed:', err);
+        }
+      })();
+    }
 
     return NextResponse.json(
       {
@@ -140,6 +172,7 @@ export async function POST(req: NextRequest) {
         runId: run.id,
         personalBest,
         previousBest: priorBestRow,
+        pendingReview,
       },
       { status: 201 },
     );

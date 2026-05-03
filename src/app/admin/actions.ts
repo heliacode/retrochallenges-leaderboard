@@ -79,6 +79,57 @@ export async function deleteRunAction(runId: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Anti-cheat review queue. Runs come in pre-flagged when their
+// completionTimeFrames falls below the manifest's flagBelowFrames
+// threshold; an admin clears them via approve, or removes them via
+// reject. Both write to the audit log.
+// ---------------------------------------------------------------------------
+export async function approveRunAction(runId: string) {
+  const me = await requireAdmin();
+  const snap = await prisma.run.findUnique({
+    where: { id: runId },
+    select: { game: true, challengeName: true, userId: true, completionTimeFrames: true },
+  });
+  await prisma.run.update({
+    where: { id: runId },
+    data: { pendingReview: false },
+  });
+  await writeAudit(me.userId, 'approve_run', 'run', runId, snap as unknown as Prisma.InputJsonValue);
+  revalidatePath('/admin/pending');
+  revalidatePath('/admin');
+  if (snap) {
+    revalidatePath(`/leaderboards/c/${encodeURIComponent(snap.game)}/${encodeURIComponent(snap.challengeName)}`);
+  }
+}
+
+// Reject = hide. We don't hard-delete from the queue so the run row
+// stays available for forensic review later. Admin can hard-delete from
+// /admin/runs if needed.
+export async function rejectRunAction(runId: string, reason: string | null) {
+  const me = await requireAdmin();
+  const snap = await prisma.run.findUnique({
+    where: { id: runId },
+    select: { game: true, challengeName: true, userId: true, completionTimeFrames: true },
+  });
+  await prisma.run.update({
+    where: { id: runId },
+    data: {
+      // Clear pendingReview so it leaves the queue, and hide it so it
+      // never appears on the public leaderboard.
+      pendingReview: false,
+      hiddenAt: new Date(),
+      hiddenReason: reason || 'rejected from review queue',
+    },
+  });
+  await writeAudit(me.userId, 'reject_run', 'run', runId, {
+    reason: reason || null,
+    snapshot: snap,
+  } as unknown as Prisma.InputJsonValue);
+  revalidatePath('/admin/pending');
+  revalidatePath('/admin');
+}
+
+// ---------------------------------------------------------------------------
 // User moderation
 // ---------------------------------------------------------------------------
 export async function banUserAction(userId: string) {

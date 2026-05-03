@@ -14,6 +14,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </h2>
         <nav className="space-y-1 text-sm">
           <AdminNavLink href="/admin">           Dashboard   </AdminNavLink>
+          <AdminNavLink href="/admin/pending">   Pending     </AdminNavLink>
           <AdminNavLink href="/admin/runs">      Runs        </AdminNavLink>
           <AdminNavLink href="/admin/users">     Users       </AdminNavLink>
           <AdminNavLink href="/admin/challenges">Challenges  </AdminNavLink>
