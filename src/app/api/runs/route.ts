@@ -59,21 +59,20 @@ export async function POST(req: NextRequest) {
   }
 
   // 2b. Anti-cheat screening. Per-challenge thresholds in the manifest:
-  //     - completionTimeFrames < minPlausibleFrames → outright reject (impossible)
+  //     - completionTimeFrames < minPlausibleFrames → REJECT (currently disabled — see below)
   //     - completionTimeFrames < flagBelowFrames    → insert with pendingReview=true
   //     A challenge with no thresholds skips screening (fail-open).
+  //
+  // The minPlausibleFrames REJECTION is temporarily disabled: the early
+  // thresholds turned out too aggressive for legitimate fast runs, and
+  // a hard 400 is a worse player experience than a soft "queued for
+  // review" while we tune them. Soft flagging is enough — admins can
+  // catch impossible submissions in /admin/pending and reject them
+  // manually. Re-enable when thresholds are calibrated against real
+  // player data.
   let pendingReview = false;
   if (s.completionTimeFrames != null) {
     const thresholds = await getChallengeAntiCheatThresholds(s.game, s.challengeName);
-    if (thresholds.minPlausibleFrames != null && s.completionTimeFrames < thresholds.minPlausibleFrames) {
-      return NextResponse.json(
-        {
-          error: 'implausible_time',
-          detail: `completionTimeFrames=${s.completionTimeFrames} is below minPlausibleFrames=${thresholds.minPlausibleFrames}`,
-        },
-        { status: 400 },
-      );
-    }
     if (thresholds.flagBelowFrames != null && s.completionTimeFrames < thresholds.flagBelowFrames) {
       pendingReview = true;
     }
