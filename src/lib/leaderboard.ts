@@ -1,5 +1,5 @@
 import { prisma } from './db';
-import { getGamesManifest } from './challenges-manifest';
+import { getChallengesManifest, getGamesManifest } from './challenges-manifest';
 
 // Resolve a user's effective avatar URL: if they uploaded a custom one
 // it lives at /api/users/<id>/avatar, otherwise we fall back to whatever
@@ -182,24 +182,29 @@ export interface ChallengeSummary {
 
 // `game` (optional) scopes the result to a single game's challenges, used
 // by /g/[game] to render the game-detail page. Unscoped, this powers the
-// home page's cross-game catalog.
+// home page's cross-game catalog. Result includes manifest-only challenges
+// (no runs yet) as empty rows so a brand-new challenge shows up immediately
+// instead of waiting for the first submission.
 export async function listChallengeSummaries(game?: string): Promise<ChallengeSummary[]> {
-  const groups = await prisma.run.groupBy({
-    by: ['game', 'challengeName'],
-    where: {
-      hiddenAt: null,
-      pendingReview: false,
-      user: { bannedAt: null },
-      ...(game ? { game } : {}),
-    },
-    _count: { _all: true },
-    orderBy: [{ game: 'asc' }, { challengeName: 'asc' }],
-  });
+  const [groups, manifest] = await Promise.all([
+    prisma.run.groupBy({
+      by: ['game', 'challengeName'],
+      where: {
+        hiddenAt: null,
+        pendingReview: false,
+        user: { bannedAt: null },
+        ...(game ? { game } : {}),
+      },
+      _count: { _all: true },
+      orderBy: [{ game: 'asc' }, { challengeName: 'asc' }],
+    }),
+    getChallengesManifest(),
+  ]);
   // N+1 with N small (two queries per challenge — rank-1 row + distinct-
   // userId count for the "X players" stat). Fine at our scale (single-
   // digit challenges); revisit with a single window-function query if the
   // catalog grows beyond ~50.
-  return Promise.all(
+  const withRuns = await Promise.all(
     groups.map(async (g) => {
       const [top, playerGroups] = await Promise.all([
         getChallengeLeaderboard(g.game, g.challengeName, 1),
@@ -222,6 +227,31 @@ export async function listChallengeSummaries(game?: string): Promise<ChallengeSu
         topRun: top[0] ?? null,
       };
     }),
+  );
+
+  // UNION with manifest — surface challenges that exist in the manifest
+  // but have no runs yet, as empty rows. Without this, a brand-new
+  // challenge invisibly waits for someone to submit before anyone knows
+  // it's there to attempt.
+  const seen = new Set(withRuns.map((c) => `${c.game}::${c.challengeName}`));
+  const manifestOnly: ChallengeSummary[] = [];
+  for (const meta of manifest.values()) {
+    if (game && meta.game !== game) continue;
+    const key = `${meta.game}::${meta.challengeName}`;
+    if (seen.has(key)) continue;
+    manifestOnly.push({
+      game: meta.game,
+      challengeName: meta.challengeName,
+      runCount: 0,
+      playerCount: 0,
+      topRun: null,
+    });
+  }
+
+  return [...withRuns, ...manifestOnly].sort((a, b) =>
+    a.game === b.game
+      ? a.challengeName.localeCompare(b.challengeName)
+      : a.game.localeCompare(b.game),
   );
 }
 
@@ -255,7 +285,9 @@ export async function listGames(): Promise<GameSummary[]> {
     }),
     getGamesManifest(),
   ]);
-  return Promise.all(
+
+  // Compute summaries for games that have at least one visible run.
+  const withRuns = await Promise.all(
     games.map(async (g) => {
       const [challengeRows, playerRows] = await Promise.all([
         prisma.run.groupBy({
@@ -276,6 +308,25 @@ export async function listGames(): Promise<GameSummary[]> {
       };
     }),
   );
+
+  // UNION with manifest games — a brand-new game (zero runs in the DB)
+  // should still show up on /leaderboards as an empty tile so players
+  // know it exists and can be the first to put a time on the board.
+  const seen = new Set(withRuns.map((g) => g.game));
+  const manifestOnly: GameSummary[] = [];
+  for (const meta of manifest.values()) {
+    if (!seen.has(meta.game)) {
+      manifestOnly.push({
+        game: meta.game,
+        boxArtUrl: meta.boxArtUrl,
+        totalChallenges: 0,
+        totalRuns: 0,
+        totalPlayers: 0,
+      });
+    }
+  }
+
+  return [...withRuns, ...manifestOnly].sort((a, b) => a.game.localeCompare(b.game));
 }
 
 // Top-of-page totals for the home page.
