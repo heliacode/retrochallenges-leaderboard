@@ -5,6 +5,7 @@ import { verifySubmissionSecret } from '@/lib/auth';
 import { isBetterRun, getChallengeLeaderboard, challengeHref } from '@/lib/leaderboard';
 import { notifyDiscordTopPlacement } from '@/lib/discord';
 import { getChallengeAntiCheatThresholds } from '@/lib/challenges-manifest';
+import { rateLimit } from '@/lib/rate-limit';
 
 // Runtime schema for the submission payload. Matches the shape written
 // by RC.report_completion + the caller-supplied user identity pulled
@@ -26,11 +27,45 @@ const SubmissionSchema = z.object({
 
 export const runtime = 'nodejs';
 
+// Per-IP rate limit for the submit endpoint. The shared submission
+// secret lives in the Electron binary — anyone who installs the app can
+// extract it and start submitting. The most likely abuse is a spam
+// flood (curl loop with random googleSubs creating fake user records).
+// 10/min/IP is way above any legit player's submission rate (challenges
+// take 30s+) but caps a flood at ~600/hour/IP — small enough that the
+// /admin/pending queue can keep up with manual cleanup.
+const RUNS_RATE_MAX        = 10;
+const RUNS_RATE_WINDOW_MS  = 60_000;
+
+function clientIp(req: NextRequest): string {
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  return req.headers.get('x-real-ip')?.trim() ?? 'unknown';
+}
+
 export async function POST(req: NextRequest) {
   // 1. Auth: shared-secret header. Leaky (lives in the Electron binary)
   //    but stops casual curl abuse. Moderation is the real trust backstop.
   if (!verifySubmissionSecret(req.headers.get('x-rc-submission-secret'))) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // 1b. Rate limit per source IP. Authenticated callers still get
+  //     limited so a leaked secret can't fuel an unlimited flood.
+  const ip    = clientIp(req);
+  const limit = rateLimit(`runs:${ip}`, RUNS_RATE_MAX, RUNS_RATE_WINDOW_MS);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: 'rate_limited', detail: 'Too many submissions; try again shortly.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After':           String(Math.ceil(limit.resetMs / 1000)),
+          'X-RateLimit-Limit':     String(RUNS_RATE_MAX),
+          'X-RateLimit-Remaining': '0',
+        },
+      },
+    );
   }
 
   // 2. Parse + validate.
