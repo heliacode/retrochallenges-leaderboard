@@ -35,6 +35,16 @@ export default async function AdminDashboardPage() {
         </p>
       </header>
 
+      {kpis.pendingRuns > 0 && (
+        <Link
+          href="/admin/pending"
+          className="block rounded-lg border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-amber-100 hover:bg-amber-500/20"
+        >
+          <span className="font-medium">{kpis.pendingRuns} run{kpis.pendingRuns === 1 ? '' : 's'} awaiting review</span>
+          <span className="ml-2 text-xs text-amber-300">→ open queue</span>
+        </Link>
+      )}
+
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Kpi label="users"        value={kpis.totalUsers}     sub={kpis.bannedUsers > 0 ? `${kpis.bannedUsers} banned` : undefined} />
         <Kpi label="runs"         value={kpis.totalRuns}      sub={kpis.hiddenRuns > 0 ? `${kpis.hiddenRuns} hidden` : undefined} />

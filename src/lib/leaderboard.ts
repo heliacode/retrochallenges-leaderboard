@@ -76,6 +76,7 @@ export async function getChallengeLeaderboard(
     game,
     challengeName,
     hiddenAt: null,
+    pendingReview: false,
     user: { bannedAt: null },
     ...(since ? { serverReceivedAt: { gte: since } } : {}),
   };
@@ -156,6 +157,7 @@ export async function listChallengesWithRuns() {
     by: ['game', 'challengeName'],
     where: {
       hiddenAt: null,
+      pendingReview: false,
       user: { bannedAt: null },
     },
     _count: { _all: true },
@@ -186,6 +188,7 @@ export async function listChallengeSummaries(game?: string): Promise<ChallengeSu
     by: ['game', 'challengeName'],
     where: {
       hiddenAt: null,
+      pendingReview: false,
       user: { bannedAt: null },
       ...(game ? { game } : {}),
     },
@@ -206,6 +209,7 @@ export async function listChallengeSummaries(game?: string): Promise<ChallengeSu
             game: g.game,
             challengeName: g.challengeName,
             hiddenAt: null,
+            pendingReview: false,
             user: { bannedAt: null },
           },
         }),
@@ -245,7 +249,7 @@ export async function listGames(): Promise<GameSummary[]> {
   const [games, manifest] = await Promise.all([
     prisma.run.groupBy({
       by: ['game'],
-      where: { hiddenAt: null, user: { bannedAt: null } },
+      where: { hiddenAt: null, pendingReview: false, user: { bannedAt: null } },
       _count: { _all: true },
       orderBy: { game: 'asc' },
     }),
@@ -256,11 +260,11 @@ export async function listGames(): Promise<GameSummary[]> {
       const [challengeRows, playerRows] = await Promise.all([
         prisma.run.groupBy({
           by: ['challengeName'],
-          where: { game: g.game, hiddenAt: null, user: { bannedAt: null } },
+          where: { game: g.game, hiddenAt: null, pendingReview: false, user: { bannedAt: null } },
         }),
         prisma.run.groupBy({
           by: ['userId'],
-          where: { game: g.game, hiddenAt: null, user: { bannedAt: null } },
+          where: { game: g.game, hiddenAt: null, pendingReview: false, user: { bannedAt: null } },
         }),
       ]);
       return {
@@ -281,11 +285,11 @@ export async function getOverallStats(): Promise<{
   totalChallenges: number;
 }> {
   const [totalRuns, totalPlayers, challengeGroups] = await Promise.all([
-    prisma.run.count({ where: { hiddenAt: null, user: { bannedAt: null } } }),
-    prisma.user.count({ where: { bannedAt: null, runs: { some: { hiddenAt: null } } } }),
+    prisma.run.count({ where: { hiddenAt: null, pendingReview: false, user: { bannedAt: null } } }),
+    prisma.user.count({ where: { bannedAt: null, runs: { some: { hiddenAt: null, pendingReview: false } } } }),
     prisma.run.groupBy({
       by: ['game', 'challengeName'],
-      where: { hiddenAt: null, user: { bannedAt: null } },
+      where: { hiddenAt: null, pendingReview: false, user: { bannedAt: null } },
     }),
   ]);
   return { totalRuns, totalPlayers, totalChallenges: challengeGroups.length };
@@ -319,7 +323,7 @@ const STREAK_WINDOW_MS = 60 * 60 * 1000;  // 1 hour
 
 export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
   const rows = await prisma.run.findMany({
-    where: { hiddenAt: null, user: { bannedAt: null } },
+    where: { hiddenAt: null, pendingReview: false, user: { bannedAt: null } },
     orderBy: { serverReceivedAt: 'desc' },
     take: limit,
     select: {
@@ -349,6 +353,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
             game: r.game,
             challengeName: r.challengeName,
             hiddenAt: null,
+            pendingReview: false,
             user: { bannedAt: null },
             serverReceivedAt: { lt: r.serverReceivedAt },
           },
@@ -362,6 +367,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
             game: r.game,
             challengeName: r.challengeName,
             hiddenAt: null,
+            pendingReview: false,
             serverReceivedAt: { lt: r.serverReceivedAt },
           },
           orderBy: [
@@ -378,6 +384,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
             game: r.game,
             challengeName: r.challengeName,
             hiddenAt: null,
+            pendingReview: false,
             serverReceivedAt: { gte: streakSince, lte: r.serverReceivedAt },
           },
         }),
@@ -451,7 +458,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   if (!user || user.bannedAt) return null;
 
   const userRuns = await prisma.run.findMany({
-    where: { userId, hiddenAt: null },
+    where: { userId, hiddenAt: null, pendingReview: false },
     orderBy: [
       { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
       { score: { sort: 'desc', nulls: 'last' } },
@@ -516,6 +523,41 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 
 export function userProfileHref(userId: string): string {
   return `/u/${encodeURIComponent(userId)}`;
+}
+
+// /me-only — surfaces the signed-in user's own runs that are sitting in
+// the anti-cheat review queue, so they know the submission landed but
+// hasn't been published yet. Public profiles never expose this.
+export interface MyPendingRun {
+  runId: string;
+  game: string;
+  challengeName: string;
+  score: number | null;
+  completionTimeFrames: number | null;
+  serverReceivedAt: Date;
+}
+export async function getMyPendingRuns(userId: string): Promise<MyPendingRun[]> {
+  const rows = await prisma.run.findMany({
+    where: { userId, pendingReview: true, hiddenAt: null },
+    orderBy: { serverReceivedAt: 'desc' },
+    take: 20,
+    select: {
+      id: true,
+      game: true,
+      challengeName: true,
+      score: true,
+      completionTimeFrames: true,
+      serverReceivedAt: true,
+    },
+  });
+  return rows.map((r) => ({
+    runId: r.id,
+    game: r.game,
+    challengeName: r.challengeName,
+    score: r.score,
+    completionTimeFrames: r.completionTimeFrames,
+    serverReceivedAt: r.serverReceivedAt,
+  }));
 }
 
 // Compare two run metric pairs using the same rule the leaderboard uses

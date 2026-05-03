@@ -40,6 +40,7 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
         game,
         challengeName,
         hiddenAt: null,
+        pendingReview: false,
         user: { bannedAt: null },
       },
       orderBy: { serverReceivedAt: 'asc' },

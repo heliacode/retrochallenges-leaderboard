@@ -13,6 +13,7 @@ export interface AdminKpis {
   bannedUsers: number;
   totalRuns: number;
   hiddenRuns: number;
+  pendingRuns: number;
   runsLast24h: number;
   runsLast7d: number;
   newUsersLast7d: number;
@@ -25,20 +26,21 @@ export async function getAdminKpis(): Promise<AdminKpis> {
 
   const [
     totalUsers, bannedUsers,
-    totalRuns,  hiddenRuns,
+    totalRuns,  hiddenRuns, pendingRuns,
     runsLast24h, runsLast7d, newUsersLast7d,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { bannedAt: { not: null } } }),
     prisma.run.count(),
     prisma.run.count({ where: { hiddenAt: { not: null } } }),
+    prisma.run.count({ where: { pendingReview: true, hiddenAt: null } }),
     prisma.run.count({ where: { serverReceivedAt: { gte: dayAgo } } }),
     prisma.run.count({ where: { serverReceivedAt: { gte: weekAgo } } }),
     prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
   ]);
 
   return {
-    totalUsers, bannedUsers, totalRuns, hiddenRuns,
+    totalUsers, bannedUsers, totalRuns, hiddenRuns, pendingRuns,
     runsLast24h, runsLast7d, newUsersLast7d,
   };
 }
@@ -359,6 +361,40 @@ export async function listAuditLog(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Pending review queue. Runs that came in below the manifest's
+// flagBelowFrames threshold and haven't yet been approved or rejected
+// by an admin. The queue lives at /admin/pending; cleared rows leave
+// it via approveRunAction / rejectRunAction.
+// ---------------------------------------------------------------------------
+export interface PendingRunRow {
+  id: string;
+  game: string;
+  challengeName: string;
+  score: number | null;
+  completionTimeFrames: number | null;
+  serverReceivedAt: Date;
+  user: { id: string; name: string };
+}
+
+export async function listPendingRuns(): Promise<PendingRunRow[]> {
+  const rows = await prisma.run.findMany({
+    where: { pendingReview: true, hiddenAt: null },
+    orderBy: { serverReceivedAt: 'desc' },
+    take: 200,
+    select: {
+      id: true,
+      game: true,
+      challengeName: true,
+      score: true,
+      completionTimeFrames: true,
+      serverReceivedAt: true,
+      user: { select: { id: true, name: true } },
+    },
+  });
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
 // Site setting (singleton)
 // ---------------------------------------------------------------------------
 export interface SiteBanner {
@@ -419,6 +455,7 @@ export async function listAdminChallengeStats(): Promise<AdminChallengeStat[]> {
             game: g.game,
             challengeName: g.challengeName,
             hiddenAt: null,
+            pendingReview: false,
             user: { bannedAt: null },
             completionTimeFrames: { not: null },
           },

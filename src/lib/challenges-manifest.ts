@@ -16,6 +16,11 @@ interface RawManifestChallenge {
   name: string;
   category?: string;
   difficulty?: string;
+  // Anti-cheat thresholds (frames). The submit endpoint uses these to
+  // reject impossible runs outright and route suspicious-but-possible
+  // runs into the /admin/pending review queue.
+  minPlausibleFrames?: number;
+  flagBelowFrames?: number;
 }
 interface RawManifestGame {
   name: string;
@@ -32,6 +37,11 @@ export interface ChallengeMeta {
   challengeName: string;
   category?: string;
   difficulty?: string;
+  // Anti-cheat thresholds, copied from the manifest. Both are optional —
+  // a challenge without them gets no automated screening (fail-open so a
+  // missing field never silently rejects legitimate runs).
+  minPlausibleFrames?: number;
+  flagBelowFrames?: number;
 }
 
 export interface GameMeta {
@@ -88,6 +98,22 @@ export async function getGamesManifest(): Promise<Map<string, GameMeta>> {
   return (await loadManifest()).games;
 }
 
+// Lookup helper for the submit endpoint. Returns the (minPlausibleFrames,
+// flagBelowFrames) pair for a (game, challenge) tuple. Either field may
+// be undefined — callers must treat absence as "no threshold" (fail-open).
+export async function getChallengeAntiCheatThresholds(
+  game: string,
+  challengeName: string,
+): Promise<{ minPlausibleFrames?: number; flagBelowFrames?: number }> {
+  const map = await getChallengesManifest();
+  const meta = map.get(manifestKey(game, challengeName));
+  if (!meta) return {};
+  return {
+    minPlausibleFrames: meta.minPlausibleFrames,
+    flagBelowFrames:    meta.flagBelowFrames,
+  };
+}
+
 // Pure transform — exported so tests can hit it without touching fetch.
 // Returns both per-challenge AND per-game maps in one pass through the
 // raw manifest tree.
@@ -109,6 +135,8 @@ export function parseManifest(data: RawManifest): ParsedManifest {
         challengeName: c.name,
         category: c.category,
         difficulty: c.difficulty,
+        minPlausibleFrames: typeof c.minPlausibleFrames === 'number' ? c.minPlausibleFrames : undefined,
+        flagBelowFrames:    typeof c.flagBelowFrames    === 'number' ? c.flagBelowFrames    : undefined,
       });
     }
   }
