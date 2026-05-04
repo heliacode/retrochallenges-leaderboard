@@ -12,6 +12,9 @@ import {
   type LeaderboardWindow,
   type LeaderboardView,
 } from '@/lib/leaderboard';
+import { getChallengesManifest, manifestKey } from '@/lib/challenges-manifest';
+import { gradeForRun } from '@/lib/grading';
+import { GradeChip } from '@/components/GradeChip';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +35,7 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
   // can highlight "you"), and the chronologically-first completer of this
   // challenge (so they get a 🥇 trophy regardless of current rank — risk-
   // taker recognition that persists even if they later get out-run).
-  const [entries, session, firstEverCompleter] = await Promise.all([
+  const [entries, session, firstEverCompleter, manifest] = await Promise.all([
     getChallengeLeaderboard(game, challengeName, 50, activeWindow, activeView),
     auth(),
     prisma.run.findFirst({
@@ -46,7 +49,10 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
       orderBy: { serverReceivedAt: 'asc' },
       select: { userId: true },
     }),
+    getChallengesManifest(),
   ]);
+  // Grade thresholds for THIS challenge (looked up once, reused per row).
+  const gradeThresholds = manifest.get(manifestKey(game, challengeName))?.gradeThresholds;
   const meId = session?.user?.id ?? null;
   const firstEverUserId = firstEverCompleter?.userId ?? null;
 
@@ -77,6 +83,7 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
                 <th className="py-2 pr-2">Player</th>
                 <th className="py-2 pr-2 text-right">Score</th>
                 <th className="py-2 pr-2 text-right">Time</th>
+                <th className="py-2 pr-2 text-right">Grade</th>
                 <th className="py-2 pr-2 text-right hidden sm:table-cell">Submitted</th>
               </tr>
             </thead>
@@ -133,6 +140,9 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
                     </td>
                     <td className="py-2 pr-2 text-right font-mono text-slate-200">
                       {formatFrames(e.completionTimeFrames)}
+                    </td>
+                    <td className="py-2 pr-2 text-right">
+                      <GradeChip grade={gradeForRun(gradeThresholds, e.completionTimeFrames)} size="md" />
                     </td>
                     <td className="py-2 pr-2 text-right text-xs text-slate-500 hidden sm:table-cell">
                       {new Date(e.serverReceivedAt).toLocaleDateString()}
