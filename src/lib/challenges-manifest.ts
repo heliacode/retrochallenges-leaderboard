@@ -21,6 +21,13 @@ interface RawManifestChallenge {
   // runs into the /admin/pending review queue.
   minPlausibleFrames?: number;
   flagBelowFrames?: number;
+  // Per-challenge grade thresholds. Ordered SSS → SS → S → A → B by
+  // maxFrames; gradeForRun() walks the array and returns the first
+  // grade whose maxFrames the run's completionTimeFrames falls under.
+  grades?: {
+    by?: string;
+    thresholds?: { grade: string; maxFrames: number }[];
+  };
 }
 interface RawManifestGame {
   name: string;
@@ -42,6 +49,9 @@ export interface ChallengeMeta {
   // missing field never silently rejects legitimate runs).
   minPlausibleFrames?: number;
   flagBelowFrames?: number;
+  // Per-challenge grade thresholds (SSS → B by maxFrames).
+  // Undefined when the challenge defines no grading.
+  gradeThresholds?: { grade: string; maxFrames: number }[];
 }
 
 export interface GameMeta {
@@ -130,6 +140,10 @@ export function parseManifest(data: RawManifest): ParsedManifest {
     });
     for (const c of g.challenges) {
       if (!c || typeof c.name !== 'string') continue;
+      const rawThresholds = c.grades && Array.isArray(c.grades.thresholds) ? c.grades.thresholds : undefined;
+      const gradeThresholds = rawThresholds
+        ? rawThresholds.filter((t) => t && typeof t.grade === 'string' && typeof t.maxFrames === 'number')
+        : undefined;
       challenges.set(manifestKey(g.name, c.name), {
         game: g.name,
         challengeName: c.name,
@@ -137,6 +151,7 @@ export function parseManifest(data: RawManifest): ParsedManifest {
         difficulty: c.difficulty,
         minPlausibleFrames: typeof c.minPlausibleFrames === 'number' ? c.minPlausibleFrames : undefined,
         flagBelowFrames:    typeof c.flagBelowFrames    === 'number' ? c.flagBelowFrames    : undefined,
+        gradeThresholds:    gradeThresholds && gradeThresholds.length > 0 ? gradeThresholds : undefined,
       });
     }
   }

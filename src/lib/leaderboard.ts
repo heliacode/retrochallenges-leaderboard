@@ -1,5 +1,6 @@
 import { prisma } from './db';
-import { getChallengesManifest, getGamesManifest } from './challenges-manifest';
+import { getChallengesManifest, getGamesManifest, manifestKey } from './challenges-manifest';
+import { gradeForRun, gradeRank, summarizeTrophies, type Grade, type TrophyStats } from './grading';
 
 // Resolve a user's effective avatar URL: if they uploaded a custom one
 // it lives at /api/users/<id>/avatar, otherwise we fall back to whatever
@@ -474,6 +475,14 @@ export interface UserProfile {
   createdAt: Date;
   totalRuns: number;
   challenges: UserProfileChallenge[];
+  // Trophy aggregation across the entire manifest. Drives the Trophy
+  // Room section: best-grade-per-challenge tally + completion %s +
+  // unattempted-challenges visibility.
+  trophies: TrophyStats;
+  // Manifest-driven full catalog the player can be measured against.
+  // Includes challenges they haven't attempted (bestGrade=null) so
+  // the Trophy Room can show empty rows as "go earn this".
+  catalog: TrophyCatalogEntry[];
 }
 
 // One row per (game, challengeName) the user has runs on.
@@ -488,6 +497,20 @@ export interface UserProfileChallenge {
     serverReceivedAt: Date;
   };
   rank: number | null;   // null if we couldn't determine; otherwise 1-based
+  // Best grade earned across this user's runs on this challenge.
+  // Null when the challenge has no grade thresholds in the manifest
+  // OR the user's best run has no completionTimeFrames.
+  bestGrade: Grade | null;
+}
+
+// One row per challenge in the manifest, regardless of whether the
+// user has attempted it. bestGrade is null for unattempted entries
+// so the Trophy Room can render them as "—" / dim rows.
+export interface TrophyCatalogEntry {
+  game: string;
+  challengeName: string;
+  bestGrade: Grade | null;
+  attempted: boolean;
 }
 
 // Build a UserProfile for /u/<userId>. Rank is computed by counting how many
@@ -524,22 +547,37 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     },
   });
 
-  // Collapse to one row per (game, challengeName) — the first occurrence
-  // is already the user's best because the orderBy mirrors the leaderboard
-  // sort. Count attempts per challenge for the secondary stat.
-  const byChallenge = new Map<string, { best: typeof userRuns[number]; attempts: number }>();
+  // Collapse to one row per (game, challengeName). The orderBy already
+  // puts the best run first per challenge, so a Map insert-once keyed
+  // on (game, challengeName) yields the user's best automatically.
+  // We also walk EVERY run on each challenge to compute the best
+  // grade (which can outrank the best-time row when grading rewards
+  // a completion-time threshold the fastest run happens to miss —
+  // rare but possible if score weighting changes things later).
+  const byChallenge = new Map<string, {
+    best: typeof userRuns[number];
+    attempts: number;
+    bestGrade: Grade | null;
+  }>();
+  const manifest = await getChallengesManifest();
   for (const r of userRuns) {
     const key = `${r.game}::${r.challengeName}`;
+    const meta = manifest.get(manifestKey(r.game, r.challengeName));
+    const grade = gradeForRun(meta?.gradeThresholds, r.completionTimeFrames);
     const existing = byChallenge.get(key);
     if (!existing) {
-      byChallenge.set(key, { best: r, attempts: 1 });
+      byChallenge.set(key, { best: r, attempts: 1, bestGrade: grade });
     } else {
       existing.attempts += 1;
+      // Lower rank index = better grade (SSS=0 ... B=4); null is worse than B.
+      if (gradeRank(grade) < gradeRank(existing.bestGrade)) {
+        existing.bestGrade = grade;
+      }
     }
   }
 
   const challenges: UserProfileChallenge[] = await Promise.all(
-    Array.from(byChallenge.values()).map(async ({ best, attempts }) => {
+    Array.from(byChallenge.values()).map(async ({ best, attempts, bestGrade }) => {
       const top = await getChallengeLeaderboard(best.game, best.challengeName, 100);
       const idx = top.findIndex((entry) => entry.userId === userId);
       return {
@@ -553,6 +591,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
           serverReceivedAt: best.serverReceivedAt,
         },
         rank: idx >= 0 ? idx + 1 : null,
+        bestGrade,
       };
     }),
   );
@@ -562,6 +601,30 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     return a.challengeName.localeCompare(b.challengeName);
   });
 
+  // Trophy catalog: union the user's attempted challenges with the
+  // full manifest so unattempted rows render as "—". Total count
+  // drives the completion percentages.
+  const attemptedByKey = new Map(challenges.map((c) => [`${c.game}::${c.challengeName}`, c]));
+  const catalog: TrophyCatalogEntry[] = [];
+  for (const meta of manifest.values()) {
+    const k = `${meta.game}::${meta.challengeName}`;
+    const att = attemptedByKey.get(k);
+    catalog.push({
+      game: meta.game,
+      challengeName: meta.challengeName,
+      bestGrade: att ? att.bestGrade : null,
+      attempted: !!att,
+    });
+  }
+  catalog.sort((a, b) => {
+    if (a.game !== b.game) return a.game.localeCompare(b.game);
+    return a.challengeName.localeCompare(b.challengeName);
+  });
+  const trophies = summarizeTrophies(
+    catalog.length,
+    challenges.map((c) => c.bestGrade),
+  );
+
   return {
     userId: user.id,
     name: user.name,
@@ -569,6 +632,8 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     createdAt: user.createdAt,
     totalRuns: userRuns.length,
     challenges,
+    trophies,
+    catalog,
   };
 }
 

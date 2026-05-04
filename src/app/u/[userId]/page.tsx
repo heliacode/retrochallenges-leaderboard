@@ -8,6 +8,8 @@ import {
   type UserProfile,
   type UserProfileChallenge,
 } from '@/lib/leaderboard';
+import { GradeChip } from '@/components/GradeChip';
+import { TrophyRoom } from '@/components/TrophyRoom';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,7 @@ export default async function UserProfilePage({ params }: PageProps) {
   return (
     <div className="space-y-8">
       <Hero profile={profile} />
+      <TrophyRoom trophies={profile.trophies} catalog={profile.catalog} />
       {profile.challenges.length === 0 ? (
         <p className="text-slate-400">
           No runs yet — once {profile.name} finishes a challenge, it'll appear here.
@@ -80,6 +83,7 @@ function ChallengeTable({ rows }: { rows: UserProfileChallenge[] }) {
               <th className="py-2 pr-2">Challenge</th>
               <th className="py-2 pr-2 text-right">Score</th>
               <th className="py-2 pr-2 text-right">Time</th>
+              <th className="py-2 pr-2 text-right">Grade</th>
               <th className="py-2 pr-2 text-right">Rank</th>
               <th className="py-2 pr-2 text-right hidden sm:table-cell">Attempts</th>
             </tr>
@@ -101,6 +105,9 @@ function ChallengeTable({ rows }: { rows: UserProfileChallenge[] }) {
                 </td>
                 <td className="py-2 pr-2 text-right font-mono text-slate-200 tabular-nums">
                   {formatFrames(r.bestRun.completionTimeFrames)}
+                </td>
+                <td className="py-2 pr-2 text-right">
+                  <GradeChip grade={r.bestGrade} />
                 </td>
                 <td className="py-2 pr-2 text-right font-mono">
                   {r.rank ? <RankBadge rank={r.rank} /> : <span className="text-slate-500">—</span>}
