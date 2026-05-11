@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/db';
 import {
+  challengeHref,
   gameHref,
   getChallengeLeaderboard,
   formatFrames,
@@ -179,7 +180,7 @@ function buildHref(
   window: LeaderboardWindow,
   view: LeaderboardView,
 ): string {
-  const base = `/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`;
+  const base = challengeHref(game, challengeName);
   const params: string[] = [];
   if (window !== 'all') params.push(`window=${window}`);
   if (view !== 'best') params.push(`view=${view}`);
