@@ -149,7 +149,7 @@ function ChallengeCard({ summary }: { summary: ChallengeSummary }) {
         </span>
       </div>
 
-      {top && (
+      {top ? (
         <div className="mt-3 flex items-center gap-2 rounded-md bg-slate-925 px-2.5 py-2 text-sm">
           <span className="font-mono text-amber-300" aria-label="Rank 1">#1</span>
           {top.userPictureUrl ? (
@@ -167,6 +167,14 @@ function ChallengeCard({ summary }: { summary: ChallengeSummary }) {
           <span className="font-mono text-slate-300 tabular-nums">
             {formatTopMetric(top.score, top.completionTimeFrames)}
           </span>
+        </div>
+      ) : (
+        // Placeholder row keeps card heights aligned in the 2-col grid when
+        // a challenge has no runs yet. Matches the real #1 row's height (20px
+        // avatar + py-2) so siblings line up; dashed border + muted copy
+        // signals "empty, not loading".
+        <div className="mt-3 flex h-9 items-center justify-center gap-2 rounded-md border border-dashed border-slate-700 px-2.5 text-xs text-slate-500">
+          Be the first to complete this
         </div>
       )}
     </Link>
