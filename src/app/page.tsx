@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { CatalogView } from '@/components/CatalogView';
+import { getLatestWindowsDownloadUrl } from '@/lib/releases';
 
 // Skip build-time pre-render — we don't have a DB at build time on Railway,
 // and we need to read the request host to decide what to render.
@@ -21,16 +22,20 @@ export default async function HomePage() {
   if (LEGACY_CATALOG_HOSTS.has(hostname)) {
     return <CatalogView />;
   }
-  return <LandingPage />;
+  // Resolve the latest stable Windows installer URL at render time so
+  // the Download CTA deep-links straight to the .exe — bypasses the
+  // cryptic-for-end-users GitHub releases page.
+  const downloadUrl = await getLatestWindowsDownloadUrl();
+  return <LandingPage downloadUrl={downloadUrl} />;
 }
 
 // ---------------------------------------------------------------------------
 // Landing page (flawlessnes.com)
 // ---------------------------------------------------------------------------
-function LandingPage() {
+function LandingPage({ downloadUrl }: { downloadUrl: string }) {
   return (
     <div className="space-y-16">
-      <Hero />
+      <Hero downloadUrl={downloadUrl} />
       <Features />
       <FeaturedCreator />
       <Creators />
@@ -38,7 +43,7 @@ function LandingPage() {
   );
 }
 
-function Hero() {
+function Hero({ downloadUrl }: { downloadUrl: string }) {
   return (
     <section className="text-center pt-8">
       <h1 className="font-display text-4xl sm:text-5xl font-bold text-white tracking-tight">
@@ -52,7 +57,7 @@ function Hero() {
       </p>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
         <a
-          href="https://github.com/heliacode/RetroChallenges/releases/latest"
+          href={downloadUrl}
           className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 hover:bg-indigo-600 transition-colors"
         >
           Download for Windows
