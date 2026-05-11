@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db';
 import { verifySubmissionSecret } from '@/lib/auth';
 import { isBetterRun, getChallengeLeaderboard, challengeHref } from '@/lib/leaderboard';
 import { notifyDiscordTopPlacement } from '@/lib/discord';
-import { getChallengeAntiCheatThresholds } from '@/lib/challenges-manifest';
 import { rateLimit } from '@/lib/rate-limit';
 
 // Runtime schema for the submission payload. Matches the shape written
@@ -93,24 +92,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2b. Anti-cheat screening. Per-challenge thresholds in the manifest:
-  //     - completionTimeFrames < minPlausibleFrames → REJECT (currently disabled — see below)
-  //     - completionTimeFrames < flagBelowFrames    → insert with pendingReview=true
-  //     A challenge with no thresholds skips screening (fail-open).
+  // 2b. Anti-cheat screening. Single hard floor: any completion in under
+  //     PENDING_REVIEW_FLOOR_FRAMES is queued for manual review.
+  //     Everything else is accepted as a legit run.
   //
-  // The minPlausibleFrames REJECTION is temporarily disabled: the early
-  // thresholds turned out too aggressive for legitimate fast runs, and
-  // a hard 400 is a worse player experience than a soft "queued for
-  // review" while we tune them. Soft flagging is enough — admins can
-  // catch impossible submissions in /admin/pending and reject them
-  // manually. Re-enable when thresholds are calibrated against real
-  // player data.
+  // The earlier per-challenge `flagBelowFrames` system was tuned too
+  // tight for the savestate-includes-prelevel-splash reality of most
+  // challenges (e.g. SMB 1-1's 1500-frame floor caught even casual
+  // 25-second runs because the splash alone is ~180 frames). One global
+  // floor is simpler and almost-impossible-to-trip on legitimate play.
+  // At 60 fps that's about 2 seconds — anything shorter is either a
+  // misconfigured win predicate firing on the savestate's first frame
+  // or genuine fraud, both of which a human should look at.
+  const PENDING_REVIEW_FLOOR_FRAMES = 120;
   let pendingReview = false;
-  if (s.completionTimeFrames != null) {
-    const thresholds = await getChallengeAntiCheatThresholds(s.game, s.challengeName);
-    if (thresholds.flagBelowFrames != null && s.completionTimeFrames < thresholds.flagBelowFrames) {
-      pendingReview = true;
-    }
+  if (s.completionTimeFrames != null && s.completionTimeFrames < PENDING_REVIEW_FLOOR_FRAMES) {
+    pendingReview = true;
   }
 
   // 3. Upsert user, insert run. Runs into the same User row on every
