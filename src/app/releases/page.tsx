@@ -33,7 +33,7 @@ export default async function ReleasesPage() {
         <p className="text-slate-400">
           Couldn&rsquo;t reach the GitHub releases API. Try again in a few minutes, or browse{' '}
           <a
-            href="https://github.com/heliacode/RetroChallenges/releases"
+            href="https://github.com/heliacode/flawlessnes-releases/releases"
             target="_blank"
             rel="noopener noreferrer"
             className="text-indigo-300 hover:text-indigo-200 underline"
