@@ -49,6 +49,32 @@ interface RawRelease {
   assets: RawAsset[];
 }
 
+// Resolves the direct browser-download URL for the latest stable
+// Windows installer, so the home-page CTA can deep-link straight to
+// the .exe instead of dumping users on a GitHub releases page (which
+// is cryptic and forces them to pick a file). Skips drafts and
+// prereleases. Falls back to /releases on this site if the API is
+// unreachable or no .exe asset is found.
+//
+// Pattern match is intentionally loose — electron-builder emits
+// `RetroChallenges Setup <version>.exe` (with spaces, sometimes dots
+// or dashes between version segments). We match any release asset
+// whose filename ends in `.exe`. If multiple .exe assets ship per
+// release someday, we'd refine; for now, one .exe = the Setup
+// installer.
+export async function getLatestWindowsDownloadUrl(): Promise<string> {
+  const FALLBACK = '/releases';
+  try {
+    const releases = await getReleases();
+    const stable = releases.find((r) => !r.draft && !r.prerelease);
+    if (!stable) return FALLBACK;
+    const exe = stable.assets.find((a) => a.name.toLowerCase().endsWith('.exe'));
+    return exe ? exe.browser_download_url : FALLBACK;
+  } catch {
+    return FALLBACK;
+  }
+}
+
 export async function getReleases(): Promise<Release[]> {
   try {
     const res = await fetch(RELEASES_URL, {
