@@ -6,8 +6,12 @@
 // has a 60-req/hr rate limit for unauthed requests so being conservative
 // matters.
 
+// Public releases repo. The source repo (heliacode/RetroChallenges) is
+// private; built installers are pushed to flawlessnes-releases by the
+// manual_release.yml workflow so anonymous users (and this page) can
+// fetch without authentication.
 const RELEASES_URL =
-  'https://api.github.com/repos/heliacode/RetroChallenges/releases?per_page=20';
+  'https://api.github.com/repos/heliacode/flawlessnes-releases/releases?per_page=20';
 const REVALIDATE_SECONDS = 600; // 10 min
 
 export interface ReleaseAsset {
