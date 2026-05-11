@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { CatalogView } from '@/components/CatalogView';
-import { getLatestWindowsDownloadUrl } from '@/lib/releases';
 
 // Skip build-time pre-render — we don't have a DB at build time on Railway,
 // and we need to read the request host to decide what to render.
 export const dynamic = 'force-dynamic';
+
+const DOWNLOAD_URL = 'https://download.flawlessnes.com/RetroChallenges.Setup.1.4.8.exe';
 
 // Hostnames that should still see the catalog at the root URL. Anything
 // else (flawlessnes.com, www.flawlessnes.com, localhost during dev, etc.)
@@ -22,11 +23,7 @@ export default async function HomePage() {
   if (LEGACY_CATALOG_HOSTS.has(hostname)) {
     return <CatalogView />;
   }
-  // Resolve the latest stable Windows installer URL at render time so
-  // the Download CTA deep-links straight to the .exe — bypasses the
-  // cryptic-for-end-users GitHub releases page.
-  const downloadUrl = await getLatestWindowsDownloadUrl();
-  return <LandingPage downloadUrl={downloadUrl} />;
+  return <LandingPage downloadUrl={DOWNLOAD_URL} />;
 }
 
 // ---------------------------------------------------------------------------
