@@ -17,6 +17,7 @@
 import { prisma } from '@/lib/db';
 import { gradeForRun, type Grade } from '@/lib/grading';
 import { getChallengesManifest, manifestKey } from '@/lib/challenges-manifest';
+import { effectivePictureUrl } from '@/lib/leaderboard';
 
 export type PodiumWindow = 'daily' | 'weekly' | 'all';
 
@@ -65,7 +66,12 @@ export async function getTopPlayer(window: PodiumWindow): Promise<PodiumEntry | 
       challengeName: true,
       completionTimeFrames: true,
       user: {
-        select: { id: true, name: true, pictureUrl: true },
+        // hasCustomAvatar is the toggle effectivePictureUrl() reads to
+        // decide between the uploaded /api/users/<id>/avatar route and
+        // the Google-OAuth fallback. Without it the podium always
+        // showed the Google picture even after a player uploaded a
+        // custom avatar.
+        select: { id: true, name: true, pictureUrl: true, hasCustomAvatar: true },
       },
     },
   });
@@ -95,7 +101,7 @@ export async function getTopPlayer(window: PodiumWindow): Promise<PodiumEntry | 
       bestByPair.set(pairKey, {
         userId: run.userId,
         userName: run.user.name,
-        userPictureUrl: run.user.pictureUrl,
+        userPictureUrl: effectivePictureUrl(run.user),
         points,
       });
     }

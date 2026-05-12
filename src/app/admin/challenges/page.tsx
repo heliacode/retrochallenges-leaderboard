@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { listAdminChallengeStats } from '@/lib/admin';
 import { challengeHref, formatFrames } from '@/lib/leaderboard';
+import { ResetChallengeButton } from '@/components/admin/ResetChallengeButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +14,11 @@ export default async function AdminChallengesPage() {
       <header>
         <h1 className="font-display text-2xl font-bold text-white">Challenges</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Read-only stats for every challenge that has at least one run. Challenge
-          definitions live in the assets repo — edit there.
+          Stats for every challenge that has at least one run. Challenge
+          definitions live in the assets repo — edit there. The Reset
+          column wipes every run for a challenge (irreversible) — use
+          when the win predicate changes and old times are no longer
+          comparable.
         </p>
       </header>
 
@@ -28,6 +32,7 @@ export default async function AdminChallengesPage() {
               <th className="px-3 py-2 text-right">Fastest</th>
               <th className="px-3 py-2">Held by</th>
               <th className="px-3 py-2 text-right">Last run</th>
+              <th className="px-3 py-2 text-right">Reset</th>
             </tr>
           </thead>
           <tbody>
@@ -65,12 +70,19 @@ export default async function AdminChallengesPage() {
                       ? `${new Date(s.lastRunAt).toLocaleDateString()}${daysSince ? ` (${daysSince}d ago)` : ''}`
                       : '—'}
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <ResetChallengeButton
+                      game={s.game}
+                      challengeName={s.challengeName}
+                      runCount={s.runs}
+                    />
+                  </td>
                 </tr>
               );
             })}
             {stats.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                   No challenges have runs yet.
                 </td>
               </tr>

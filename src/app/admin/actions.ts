@@ -240,3 +240,61 @@ export async function clearBannerAction() {
   await writeAudit(me.userId, 'clear_banner', 'setting', 'banner', null);
   revalidatePath('/', 'layout');
 }
+
+// ---------------------------------------------------------------------------
+// Bulk run reset.
+//
+// Hard-deletes every run for a (game, challengeName) tuple. Used when
+// the challenge's win predicate / RAM gate has changed and old runs
+// no longer represent a comparable scoring rubric, OR when test data
+// from authoring sessions needs to be wiped before going public.
+//
+// Destructive AND irreversible — there's no soft-delete here, the
+// Run rows go away entirely. The audit log captures the counts and
+// per-run snapshots so we still have a paper trail.
+// ---------------------------------------------------------------------------
+export async function resetChallengeRunsAction(game: string, challengeName: string) {
+  const me = await requireAdmin();
+  if (!game || !challengeName) {
+    throw new Error('resetChallengeRunsAction: game and challengeName required');
+  }
+
+  // Snapshot before delete so the audit row preserves what we just blew
+  // away — counts, who held the records, when. The snapshot is bounded
+  // (50 most-recent runs + aggregate stats) to keep the auditlog row
+  // size reasonable; the full set is gone after the delete regardless.
+  const snapshotRuns = await prisma.run.findMany({
+    where: { game, challengeName },
+    orderBy: { serverReceivedAt: 'desc' },
+    take: 50,
+    select: {
+      id: true,
+      userId: true,
+      score: true,
+      completionTimeFrames: true,
+      serverReceivedAt: true,
+    },
+  });
+  const totalCount = await prisma.run.count({ where: { game, challengeName } });
+
+  const deleted = await prisma.run.deleteMany({
+    where: { game, challengeName },
+  });
+
+  await writeAudit(me.userId, 'reset_challenge_runs', 'challenge', `${game}::${challengeName}`, {
+    game,
+    challengeName,
+    totalDeleted: deleted.count,
+    countBeforeDelete: totalCount,
+    snapshot: snapshotRuns,
+  } as unknown as Prisma.InputJsonValue);
+
+  revalidatePath('/admin/challenges');
+  revalidatePath('/admin/runs');
+  revalidatePath('/admin');
+  revalidatePath('/leaderboards');
+  revalidatePath(`/leaderboards/c/${encodeURIComponent(game)}/${encodeURIComponent(challengeName)}`);
+  revalidatePath(`/leaderboards/g/${encodeURIComponent(game)}`);
+
+  return { deletedCount: deleted.count };
+}
