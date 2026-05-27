@@ -1,10 +1,11 @@
-// Simple download page. The GitHub releases API path is bypassed —
-// installers are mirrored at download.flawlessnes.com, so we hard-link
-// to the latest known build instead of round-tripping through GitHub.
+// Simple download page. Hard-linked to the GitHub release asset on the
+// public flawlessnes-releases repo (anonymous-downloadable). The
+// download.flawlessnes.com mirror is hand-maintained, so we link
+// straight at GitHub to avoid the CDN getting out of sync per release.
 export const dynamic = 'force-dynamic';
 
-const DOWNLOAD_URL = 'https://download.flawlessnes.com/RetroChallenges.Setup.1.4.8.exe';
-const VERSION = '1.4.8';
+const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.4.9/RetroChallenges.Setup.1.4.9.exe';
+const VERSION = '1.4.9';
 
 export default function ReleasesPage() {
   return (
