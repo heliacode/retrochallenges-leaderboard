@@ -6,7 +6,7 @@ import { CatalogView } from '@/components/CatalogView';
 // and we need to read the request host to decide what to render.
 export const dynamic = 'force-dynamic';
 
-const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.5.0/RetroChallenges.Setup.1.5.0.exe';
+const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.5.1/RetroChallenges.Setup.1.5.1.exe';
 
 // Hostnames that should still see the catalog at the root URL. Anything
 // else (flawlessnes.com, www.flawlessnes.com, localhost during dev, etc.)
