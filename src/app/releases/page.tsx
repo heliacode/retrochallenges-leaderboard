@@ -4,8 +4,8 @@
 // straight at GitHub to avoid the CDN getting out of sync per release.
 export const dynamic = 'force-dynamic';
 
-const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.5.1/RetroChallenges.Setup.1.5.1.exe';
-const VERSION = '1.5.1';
+const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.6.0/RetroChallenges.Setup.1.6.0.exe';
+const VERSION = '1.6.0';
 
 export default function ReleasesPage() {
   return (

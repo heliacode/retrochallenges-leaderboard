@@ -6,7 +6,7 @@ import { CatalogView } from '@/components/CatalogView';
 // and we need to read the request host to decide what to render.
 export const dynamic = 'force-dynamic';
 
-const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.5.1/RetroChallenges.Setup.1.5.1.exe';
+const DOWNLOAD_URL = 'https://github.com/heliacode/flawlessnes-releases/releases/download/v1.6.0/RetroChallenges.Setup.1.6.0.exe';
 
 // Hostnames that should still see the catalog at the root URL. Anything
 // else (flawlessnes.com, www.flawlessnes.com, localhost during dev, etc.)
@@ -33,6 +33,7 @@ function LandingPage({ downloadUrl }: { downloadUrl: string }) {
   return (
     <div className="space-y-16">
       <Hero downloadUrl={downloadUrl} />
+      <WhatsNew />
       <Features />
       <FeaturedCreator />
       <Creators />
@@ -75,6 +76,39 @@ function Hero({ downloadUrl }: { downloadUrl: string }) {
       <p className="mt-3 text-xs text-slate-500">
         Same Google account works across the desktop app and web — your stats follow you.
       </p>
+    </section>
+  );
+}
+
+function WhatsNew() {
+  const items = [
+    {
+      title: 'Play with your own ROM',
+      body: 'The launcher now accepts any standard dump BizHawk recognizes — region and revision variants included — not just one exact file. Legit ROMs that used to get rejected now just work.',
+    },
+    {
+      title: 'One-click “this is my game”',
+      body: 'Got an unusual dump we don’t recognize yet? Mark it as the right game in a single click from the in-app ROM Scanner — no more “ROM not found” dead-ends, and your runs still count.',
+    },
+    {
+      title: 'New game: Karnov',
+      body: 'Data East’s fire-breathing arcade classic joins the lineup. Challenges are coming soon.',
+    },
+  ];
+  return (
+    <section>
+      <h2 className="font-display text-2xl font-bold text-white text-center">What&rsquo;s New in v1.6.0</h2>
+      <p className="mt-2 mb-6 text-center text-slate-400 max-w-2xl mx-auto">
+        This update is about getting you playing faster — with whatever copy of a game you already own.
+      </p>
+      <ul className="grid gap-4 sm:grid-cols-3">
+        {items.map((it) => (
+          <li key={it.title} className="rounded-lg border border-slate-700 bg-slate-900 p-5">
+            <h3 className="font-display text-lg font-semibold text-white">{it.title}</h3>
+            <p className="mt-2 text-sm text-slate-400">{it.body}</p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
