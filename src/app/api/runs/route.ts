@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/db';
 import { verifySubmissionSecret } from '@/lib/auth';
 import { isBetterRun, getChallengeLeaderboard, challengeHref } from '@/lib/leaderboard';
+import { getChallengesManifest, isFlawlessCategory, manifestKey } from '@/lib/challenges-manifest';
 import { notifyDiscordTopPlacement } from '@/lib/discord';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -128,6 +129,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // FlawlessNES challenges rank score-first (fewest hits); everything
+    // else ranks time-first. Drives both the prior-best sort and the PB
+    // comparison below so the celebration matches the public board.
+    const flawless = isFlawlessCategory(
+      (await getChallengesManifest()).get(manifestKey(s.game, s.challengeName))?.category,
+    );
+
     // Look up the user's previous best on this challenge BEFORE the
     // insert so the new run isn't compared against itself. Same sort
     // order the public leaderboard uses. Pending runs aren't counted —
@@ -140,10 +148,15 @@ export async function POST(req: NextRequest) {
         hiddenAt: null,
         pendingReview: false,
       },
-      orderBy: [
-        { score: { sort: 'desc', nulls: 'last' } },
-        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
-      ],
+      orderBy: flawless
+        ? [
+            { score: { sort: 'desc', nulls: 'last' } },
+            { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+          ]
+        : [
+            { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
+            { score: { sort: 'desc', nulls: 'last' } },
+          ],
       select: { score: true, completionTimeFrames: true },
     });
 
@@ -169,6 +182,7 @@ export async function POST(req: NextRequest) {
         isBetterRun(
           { score: run.score, completionTimeFrames: run.completionTimeFrames },
           priorBestRow,
+          flawless,
         ));
 
     if (!pendingReview) {

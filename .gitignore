@@ -22,3 +22,7 @@ playwright/.cache/
 # Prisma
 prisma/migrations/dev.db
 prisma/migrations/dev.db-journal
+
+# prove-it demo artifacts (ephemeral)
+prove-it/
+.env.local

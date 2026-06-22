@@ -8,7 +8,11 @@
 // module scope with a TTL, plus serve stale on failure so a flaky
 // GitHub raw response doesn't break the page.
 
+// Defaults to the assets repo's main branch. Overridable via MANIFEST_URL
+// for local development / testing against an un-pushed manifest (e.g. a
+// locally-served challenges.json).
 const MANIFEST_URL =
+  process.env.MANIFEST_URL ??
   'https://raw.githubusercontent.com/heliacode/retrochallenges-assets/refs/heads/main/challenges.json';
 const TTL_MS = 5 * 60 * 1000; // 5 minutes — matches Next.js fetch revalidate hint below
 
@@ -163,19 +167,36 @@ export function parseManifest(data: RawManifest): ParsedManifest {
 // duplicated here so the leaderboard renders consistently even if the
 // manifest fetch fails or a new category appears upstream).
 // ---------------------------------------------------------------------------
-export const CATEGORY_ORDER: readonly string[] = ['boss', 'speedrun', 'survival', 'score'];
+// FlawlessNES is its own challenge family (no-hit runs, ranked by fewest
+// hits, not time). Listed first so it leads the per-game category sections.
+export const FLAWLESS_CATEGORY = 'flawlessnes';
+
+export const CATEGORY_ORDER: readonly string[] = [FLAWLESS_CATEGORY, 'boss', 'speedrun', 'survival', 'score'];
 
 export const CATEGORY_LABELS: Record<string, string> = {
-  boss:     'Boss Fights',
-  speedrun: 'Speedruns',
-  survival: 'Survival',
-  score:    'Score Targets',
-  other:    'Other',
+  flawlessnes: 'FlawlessNES — No Damage',
+  boss:        'Boss Fights',
+  speedrun:    'Speedruns',
+  survival:    'Survival',
+  score:       'Score Targets',
+  other:       'Other',
 };
 
 export function categoryLabel(category: string | undefined): string {
   if (!category) return CATEGORY_LABELS.other;
   return CATEGORY_LABELS[category] ?? category;
+}
+
+// FlawlessNES challenges rank by score (fewest hits) instead of time, and
+// render rank labels (Flawless/A/B/C/D) rather than the SSS–B time grade.
+// Everything keys off this single category check.
+export function isFlawlessCategory(category: string | undefined | null): boolean {
+  return category === FLAWLESS_CATEGORY;
+}
+
+export async function isFlawlessChallenge(game: string, challengeName: string): Promise<boolean> {
+  const map = await getChallengesManifest();
+  return isFlawlessCategory(map.get(manifestKey(game, challengeName))?.category);
 }
 
 // ---------------------------------------------------------------------------

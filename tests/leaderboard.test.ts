@@ -118,6 +118,20 @@ describe('isBetterRun', () => {
     expect(isBetterRun({ score: 5000, completionTimeFrames: 100 },
                        { score: 5000, completionTimeFrames: 100 })).toBe(false);
   });
+
+  // FlawlessNES: score-first ranking (fewest hits wins; time breaks ties).
+  test('scoreFirst: higher score is better even if slower', () => {
+    expect(isBetterRun({ score: 5000, completionTimeFrames: 9999 },
+                       { score: 3500, completionTimeFrames: 100 }, true)).toBe(true);
+  });
+  test('scoreFirst: lower score is not better even if faster', () => {
+    expect(isBetterRun({ score: 2750, completionTimeFrames: 50 },
+                       { score: 5000, completionTimeFrames: 9999 }, true)).toBe(false);
+  });
+  test('scoreFirst: on score tie, faster time wins', () => {
+    expect(isBetterRun({ score: 5000, completionTimeFrames: 80 },
+                       { score: 5000, completionTimeFrames: 120 }, true)).toBe(true);
+  });
 });
 
 describe('windowSince', () => {
