@@ -5,6 +5,8 @@ import {
   summarizeTrophies,
   emptyTrophyStats,
   GRADE_ORDER,
+  flawlessRankForScore,
+  flawlessHitsForScore,
   type Grade,
 } from '../src/lib/grading';
 
@@ -121,5 +123,39 @@ describe('emptyTrophyStats', () => {
       ssOrBetterPct: 0,
       attemptedPct: 0,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FlawlessNES scoring (the fixed hit table — must mirror the challenge .lua)
+// ---------------------------------------------------------------------------
+describe('flawlessRankForScore', () => {
+  test('maps each table cutoff to its rank', () => {
+    expect(flawlessRankForScore(5000)).toBe('Flawless');
+    expect(flawlessRankForScore(3500)).toBe('A');
+    expect(flawlessRankForScore(2750)).toBe('B');
+    expect(flawlessRankForScore(2000)).toBe('C');
+    expect(flawlessRankForScore(1250)).toBe('D');
+    expect(flawlessRankForScore(93)).toBe('D');
+  });
+  test('null when no score', () => {
+    expect(flawlessRankForScore(null)).toBeNull();
+    expect(flawlessRankForScore(undefined)).toBeNull();
+  });
+});
+
+describe('flawlessHitsForScore', () => {
+  test('inverts the full published table exactly', () => {
+    // Hits → Score pairs straight from the FlawlessNES spec table.
+    const table: [number, number][] = [
+      [0, 5000], [1, 3500], [2, 2750], [3, 2000], [4, 1250],
+      [5, 1063], [6, 903], [7, 768], [10, 472], [20, 93],
+    ];
+    for (const [hits, score] of table) {
+      expect(flawlessHitsForScore(score)).toBe(hits);
+    }
+  });
+  test('null when no score', () => {
+    expect(flawlessHitsForScore(null)).toBeNull();
   });
 });

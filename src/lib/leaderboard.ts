@@ -1,6 +1,51 @@
 import { prisma } from './db';
-import { getChallengesManifest, getGamesManifest, manifestKey } from './challenges-manifest';
+import {
+  getChallengesManifest,
+  getGamesManifest,
+  isFlawlessCategory,
+  manifestKey,
+} from './challenges-manifest';
 import { gradeForRun, gradeRank, summarizeTrophies, type Grade, type TrophyStats } from './grading';
+
+// Ranking is normally time-first (fastest clear wins, score breaks ties).
+// FlawlessNES challenges invert this: score-first (fewest hits = highest
+// score), time breaks ties. `scoreFirst` threads that choice through the
+// Prisma orderBy and the JS comparators so both axes stay consistent.
+type RunSortRow = {
+  score: number | null;
+  completionTimeFrames: number | null;
+  serverReceivedAt?: Date;
+};
+
+// Prisma orderBy fragment honoring the ranking axis. `leadUserId` prepends
+// the userId sort the DISTINCT ON (best-per-user) query requires.
+function runOrderBy(scoreFirst: boolean, leadUserId = false) {
+  const byScore = { score: { sort: 'desc', nulls: 'last' } } as const;
+  const byTime = { completionTimeFrames: { sort: 'asc', nulls: 'last' } } as const;
+  const byRecv = { serverReceivedAt: 'asc' } as const;
+  const core = scoreFirst ? [byScore, byTime, byRecv] : [byTime, byScore, byRecv];
+  return leadUserId ? [{ userId: 'asc' } as const, ...core] : core;
+}
+
+// JS comparator matching runOrderBy — used to re-sort after a DISTINCT ON
+// query (which returns userId order) and anywhere we sort in memory.
+function compareRuns(a: RunSortRow, b: RunSortRow, scoreFirst: boolean): number {
+  const as = a.score ?? -Infinity;
+  const bs = b.score ?? -Infinity;
+  const at = a.completionTimeFrames ?? Infinity;
+  const bt = b.completionTimeFrames ?? Infinity;
+  if (scoreFirst) {
+    if (as !== bs) return bs - as;
+    if (at !== bt) return at - bt;
+  } else {
+    if (at !== bt) return at - bt;
+    if (as !== bs) return bs - as;
+  }
+  if (a.serverReceivedAt && b.serverReceivedAt) {
+    return a.serverReceivedAt.getTime() - b.serverReceivedAt.getTime();
+  }
+  return 0;
+}
 
 // Resolve a user's effective avatar URL: if they uploaded a custom one
 // it lives at /api/users/<id>/avatar, otherwise we fall back to whatever
@@ -73,6 +118,10 @@ export async function getChallengeLeaderboard(
   view: LeaderboardView = 'best',
 ): Promise<LeaderboardEntry[]> {
   const since = windowSince(window);
+  // FlawlessNES challenges rank score-first (fewest hits); everything else
+  // ranks time-first. Manifest fetch is cached, so this is ~free.
+  const manifest = await getChallengesManifest();
+  const scoreFirst = isFlawlessCategory(manifest.get(manifestKey(game, challengeName))?.category);
   const baseWhere = {
     game,
     challengeName,
@@ -110,31 +159,15 @@ export async function getChallengeLeaderboard(
     const dedup = await prisma.run.findMany({
       where: baseWhere,
       distinct: ['userId'],
-      orderBy: [
-        { userId: 'asc' },
-        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
-        { score: { sort: 'desc', nulls: 'last' } },
-      ],
+      orderBy: runOrderBy(scoreFirst, true),
       select: baseSelect,
     });
-    dedup.sort((a, b) => {
-      const at = a.completionTimeFrames ?? Infinity;
-      const bt = b.completionTimeFrames ?? Infinity;
-      if (at !== bt) return at - bt;
-      const as = a.score ?? -Infinity;
-      const bs = b.score ?? -Infinity;
-      if (as !== bs) return bs - as;
-      return a.serverReceivedAt.getTime() - b.serverReceivedAt.getTime();
-    });
+    dedup.sort((a, b) => compareRuns(a, b, scoreFirst));
     rows = dedup.slice(0, limit);
   } else {
     rows = await prisma.run.findMany({
       where: baseWhere,
-      orderBy: [
-        { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
-        { score: { sort: 'desc', nulls: 'last' } },
-        { serverReceivedAt: 'asc' },
-      ],
+      orderBy: runOrderBy(scoreFirst),
       take: limit,
       select: baseSelect,
     });
@@ -253,6 +286,20 @@ export async function listChallengeSummaries(game?: string): Promise<ChallengeSu
     a.game === b.game
       ? a.challengeName.localeCompare(b.challengeName)
       : a.game.localeCompare(b.game),
+  );
+}
+
+// FlawlessNES challenges across every game, for the catalog's dedicated
+// top-level section. Reuses listChallengeSummaries (so manifest-only
+// challenges with no runs still surface) and filters to the flawlessnes
+// category from the manifest.
+export async function listFlawlessSummaries(): Promise<ChallengeSummary[]> {
+  const [summaries, manifest] = await Promise.all([
+    listChallengeSummaries(),
+    getChallengesManifest(),
+  ]);
+  return summaries.filter((s) =>
+    isFlawlessCategory(manifest.get(manifestKey(s.game, s.challengeName))?.category),
   );
 }
 
@@ -390,6 +437,9 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
     },
   });
 
+  // Manifest (cached) drives the per-challenge ranking axis for the PB badge.
+  const manifest = await getChallengesManifest();
+
   // Per-row enrichment: three independent queries fanned out in parallel
   // for each of the (small) recent set. N+1 with N ≤ ~20 — fine at our
   // scale; revisit with a window-function aggregation when this hits the
@@ -397,6 +447,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
   return Promise.all(
     rows.map(async (r): Promise<RecentRunEntry> => {
       const streakSince = new Date(r.serverReceivedAt.getTime() - STREAK_WINDOW_MS);
+      const scoreFirst = isFlawlessCategory(manifest.get(manifestKey(r.game, r.challengeName))?.category);
 
       const [firstEver, priorBetter, streakCount] = await Promise.all([
         // Was this the first-ever submission on this (game, challenge)?
@@ -422,10 +473,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
             pendingReview: false,
             serverReceivedAt: { lt: r.serverReceivedAt },
           },
-          orderBy: [
-            { completionTimeFrames: { sort: 'asc', nulls: 'last' } },
-            { score: { sort: 'desc', nulls: 'last' } },
-          ],
+          orderBy: runOrderBy(scoreFirst),
           select: { score: true, completionTimeFrames: true },
         }),
         // How many runs has this user had on this challenge within the last
@@ -445,6 +493,7 @@ export async function getRecentRuns(limit = 10): Promise<RecentRunEntry[]> {
       const personalBest = !priorBetter || isBetterRun(
         { score: r.score, completionTimeFrames: r.completionTimeFrames },
         priorBetter,
+        scoreFirst,
       );
 
       return {
@@ -563,12 +612,18 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   for (const r of userRuns) {
     const key = `${r.game}::${r.challengeName}`;
     const meta = manifest.get(manifestKey(r.game, r.challengeName));
+    const scoreFirst = isFlawlessCategory(meta?.category);
     const grade = gradeForRun(meta?.gradeThresholds, r.completionTimeFrames);
     const existing = byChallenge.get(key);
     if (!existing) {
       byChallenge.set(key, { best: r, attempts: 1, bestGrade: grade });
     } else {
       existing.attempts += 1;
+      // userRuns is ordered time-first, which is wrong for FlawlessNES —
+      // pick the best per challenge explicitly under its ranking axis.
+      if (isBetterRun(r, existing.best, scoreFirst)) {
+        existing.best = r;
+      }
       // Lower rank index = better grade (SSS=0 ... B=4); null is worse than B.
       if (gradeRank(grade) < gradeRank(existing.bestGrade)) {
         existing.bestGrade = grade;
@@ -684,17 +739,20 @@ export interface RunMetric {
   score: number | null;
   completionTimeFrames: number | null;
 }
-export function isBetterRun(a: RunMetric, b: RunMetric): boolean {
-  // Time-first ranking: every shipping challenge is a speedrun (the
-  // win predicate is a state — boss dead, score reached, etc. — and
-  // the leaderboard cares about how fast you got there). Score is
-  // only used as a tie-break so score-only legacy challenges still
-  // sort sanely.
+// Returns true when `a` is strictly better than `b`. Default ranking is
+// time-first (fastest clear wins, score breaks ties). Pass scoreFirst=true
+// for FlawlessNES challenges, where the highest score (fewest hits) wins
+// and time only breaks ties. Exposed so it's testable.
+export function isBetterRun(a: RunMetric, b: RunMetric, scoreFirst = false): boolean {
   const at = a.completionTimeFrames ?? Infinity;
   const bt = b.completionTimeFrames ?? Infinity;
-  if (at !== bt) return at < bt;
   const as = a.score ?? -Infinity;
   const bs = b.score ?? -Infinity;
+  if (scoreFirst) {
+    if (as !== bs) return as > bs;
+    return at < bt;
+  }
+  if (at !== bt) return at < bt;
   return as > bs;
 }
 

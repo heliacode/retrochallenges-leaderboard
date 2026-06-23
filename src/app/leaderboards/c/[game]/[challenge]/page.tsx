@@ -13,8 +13,13 @@ import {
   type LeaderboardWindow,
   type LeaderboardView,
 } from '@/lib/leaderboard';
-import { getChallengesManifest, manifestKey } from '@/lib/challenges-manifest';
-import { gradeForRun } from '@/lib/grading';
+import { getChallengesManifest, isFlawlessCategory, manifestKey } from '@/lib/challenges-manifest';
+import {
+  gradeForRun,
+  flawlessRankForScore,
+  flawlessHitsForScore,
+  flawlessRankChipClass,
+} from '@/lib/grading';
 import { GradeChip } from '@/components/GradeChip';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +58,11 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
     getChallengesManifest(),
   ]);
   // Grade thresholds for THIS challenge (looked up once, reused per row).
-  const gradeThresholds = manifest.get(manifestKey(game, challengeName))?.gradeThresholds;
+  const challengeMeta = manifest.get(manifestKey(game, challengeName));
+  const gradeThresholds = challengeMeta?.gradeThresholds;
+  // FlawlessNES challenges rank by hits (score), not time — different
+  // columns (Rank / Hits) and a no-time-grade chip.
+  const flawless = isFlawlessCategory(challengeMeta?.category);
   const meId = session?.user?.id ?? null;
   const firstEverUserId = firstEverCompleter?.userId ?? null;
 
@@ -82,9 +91,11 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
               <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-700">
                 <th className="py-2 pr-2 w-12">#</th>
                 <th className="py-2 pr-2">Player</th>
+                {flawless && <th className="py-2 pr-2 text-right">Rank</th>}
+                {flawless && <th className="py-2 pr-2 text-right">Hits</th>}
                 <th className="py-2 pr-2 text-right">Score</th>
                 <th className="py-2 pr-2 text-right">Time</th>
-                <th className="py-2 pr-2 text-right">Grade</th>
+                {!flawless && <th className="py-2 pr-2 text-right">Grade</th>}
                 <th className="py-2 pr-2 text-right hidden sm:table-cell">Submitted</th>
               </tr>
             </thead>
@@ -136,15 +147,27 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
                         )}
                       </Link>
                     </td>
+                    {flawless && (
+                      <td className="py-2 pr-2 text-right">
+                        <FlawlessRankChip score={e.score} />
+                      </td>
+                    )}
+                    {flawless && (
+                      <td className="py-2 pr-2 text-right font-mono text-slate-200 tabular-nums">
+                        {flawlessHitsForScore(e.score) ?? '—'}
+                      </td>
+                    )}
                     <td className="py-2 pr-2 text-right font-mono text-slate-200">
                       {e.score != null ? e.score.toLocaleString() : '—'}
                     </td>
                     <td className="py-2 pr-2 text-right font-mono text-slate-200">
                       {formatFrames(e.completionTimeFrames)}
                     </td>
-                    <td className="py-2 pr-2 text-right">
-                      <GradeChip grade={gradeForRun(gradeThresholds, e.completionTimeFrames)} size="md" />
-                    </td>
+                    {!flawless && (
+                      <td className="py-2 pr-2 text-right">
+                        <GradeChip grade={gradeForRun(gradeThresholds, e.completionTimeFrames)} size="md" />
+                      </td>
+                    )}
                     <td className="py-2 pr-2 text-right text-xs text-slate-500 hidden sm:table-cell">
                       {new Date(e.serverReceivedAt).toLocaleDateString()}
                     </td>
@@ -156,6 +179,20 @@ export default async function ChallengeLeaderboardPage({ params, searchParams }:
         </div>
       )}
     </div>
+  );
+}
+
+// Flawless/A/B/C/D pill derived from the submitted score. Mirrors GradeChip
+// but uses the FlawlessNES rank palette (Flawless = gold).
+function FlawlessRankChip({ score }: { score: number | null }) {
+  const rank = flawlessRankForScore(score);
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-md font-bold tracking-wider px-2.5 py-1 text-xs ${flawlessRankChipClass(rank)}`}
+      title={rank ? `Rank ${rank}` : 'No rank'}
+    >
+      {rank ?? '—'}
+    </span>
   );
 }
 

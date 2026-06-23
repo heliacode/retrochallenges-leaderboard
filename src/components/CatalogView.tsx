@@ -7,11 +7,14 @@ import {
   gameHref,
   getOverallStats,
   getRecentRuns,
+  listFlawlessSummaries,
   listGames,
   userProfileHref,
+  type ChallengeSummary,
   type GameSummary,
   type RecentRunEntry,
 } from '@/lib/leaderboard';
+import { flawlessRankForScore, flawlessRankChipClass } from '@/lib/grading';
 import { AutoRefresh } from '@/components/AutoRefresh';
 
 // Hero + game-tile grid + recent-activity feed. Rendered by both the
@@ -23,9 +26,10 @@ import { AutoRefresh } from '@/components/AutoRefresh';
 // to pick something to play), recent activity is the addictive scroll
 // underneath. AutoRefresh re-pulls every 30s either way.
 export async function CatalogView() {
-  const [stats, games, recent] = await Promise.all([
+  const [stats, games, flawless, recent] = await Promise.all([
     getOverallStats(),
     listGames(),
+    listFlawlessSummaries(),
     getRecentRuns(20),
   ]);
 
@@ -33,6 +37,8 @@ export async function CatalogView() {
     <div className="space-y-10">
       <AutoRefresh intervalMs={30000} />
       <Hero stats={stats} />
+
+      {flawless.length > 0 && <FlawlessSection items={flawless} />}
 
       {games.length === 0 ? (
         <section className="rounded-lg border border-dashed border-slate-700 p-8 text-center">
@@ -47,6 +53,66 @@ export async function CatalogView() {
         </>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FlawlessNES — its own top-level section. These challenges are no-hit runs
+// ranked by fewest hits (Flawless → D), distinct from the time-ranked
+// RetroChallenges below.
+// ---------------------------------------------------------------------------
+function FlawlessSection({ items }: { items: ChallengeSummary[] }) {
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline gap-2">
+        <h2 className="font-display text-xl font-semibold text-amber-200">FlawlessNES</h2>
+        <span className="text-xs font-normal text-slate-500">
+          no-damage runs · ranked by fewest hits
+        </span>
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((c) => (
+          <li key={`${c.game}::${c.challengeName}`}>
+            <FlawlessCard summary={c} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function FlawlessCard({ summary }: { summary: ChallengeSummary }) {
+  const top = summary.topRun;
+  const rank = top ? flawlessRankForScore(top.score) : null;
+  return (
+    <Link
+      href={challengeHref(summary.game, summary.challengeName)}
+      className="group block rounded-lg border border-amber-500/20 bg-slate-900 p-4 transition-colors hover:border-amber-400/60 hover:bg-slate-800"
+    >
+      <div className="min-w-0">
+        <div className="font-medium text-slate-100 truncate">{summary.challengeName}</div>
+        <div className="text-xs text-slate-500 mt-0.5">
+          {summary.game}
+          <span className="mx-1.5">&middot;</span>
+          {summary.playerCount} player{summary.playerCount === 1 ? '' : 's'}
+        </div>
+      </div>
+      {top ? (
+        <div className="mt-3 flex items-center gap-2 rounded-md bg-slate-925 px-2.5 py-2 text-sm">
+          <span className="font-mono text-amber-300" aria-label="Rank 1">#1</span>
+          <span className="text-slate-200 truncate flex-1">{top.userName}</span>
+          <span
+            className={`inline-flex items-center justify-center rounded-md px-2 py-0.5 text-[11px] font-bold tracking-wider ${flawlessRankChipClass(rank)}`}
+          >
+            {rank ?? '—'}
+          </span>
+        </div>
+      ) : (
+        <div className="mt-3 flex h-9 items-center justify-center gap-2 rounded-md border border-dashed border-slate-700 px-2.5 text-xs text-slate-500">
+          Be the first to go flawless
+        </div>
+      )}
+    </Link>
   );
 }
 

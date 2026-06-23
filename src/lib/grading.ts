@@ -57,6 +57,65 @@ export function gradeChipClass(grade: Grade | null): string {
   return GRADE_STYLES[grade];
 }
 
+// ---------------------------------------------------------------------------
+// FlawlessNES ranking
+//
+// The FlawlessNES challenge family scores by HITS TAKEN, not time. Every
+// FlawlessNES challenge shares ONE fixed table (also computed in the
+// challenge .lua so the in-game HUD and the board agree exactly):
+//
+//   Hits  Rank      Score
+//   0     Flawless  5000
+//   1     A         3500
+//   2     B         2750
+//   3     C         2000
+//   4     D         1250
+//   5+    D         round(1250 * 0.85^(hits-4))   (geometric tail, never 0)
+//
+// The desktop client submits the SCORE, which is strictly monotonic-
+// decreasing in hits — so the board ranks by score DESC and recovers both
+// the rank label and the hit count from the score alone. No DB column for
+// hits is needed, and the existing (game, challengeName, score DESC,
+// completionTimeFrames ASC) index serves the ranking directly.
+export type FlawlessRank = 'Flawless' | 'A' | 'B' | 'C' | 'D';
+
+export const FLAWLESS_RANK_ORDER: readonly FlawlessRank[] = ['Flawless', 'A', 'B', 'C', 'D'];
+
+// Rank label from the submitted score (cutoffs straight off the table).
+export function flawlessRankForScore(score: number | null | undefined): FlawlessRank | null {
+  if (score == null) return null;
+  if (score >= 5000) return 'Flawless';
+  if (score >= 3500) return 'A';
+  if (score >= 2750) return 'B';
+  if (score >= 2000) return 'C';
+  return 'D';
+}
+
+// Exact inverse of the scoring table: recover hits from the score.
+// 0..4 hits live in the linear top band (score = 3500 - 750*(h-1));
+// 5+ hits invert the geometric tail. Returns null when there's no score.
+export function flawlessHitsForScore(score: number | null | undefined): number | null {
+  if (score == null) return null;
+  if (score >= 5000) return 0;
+  if (score >= 1250) return Math.round((3500 - score) / 750) + 1; // h = 1..4
+  // score = 1250 * 0.85^(h-4)  ->  h = 4 + ln(score/1250)/ln(0.85)
+  const h = 4 + Math.log(score / 1250) / Math.log(0.85);
+  return Math.max(5, Math.round(h));
+}
+
+const FLAWLESS_RANK_STYLES: Record<FlawlessRank, string> = {
+  Flawless: 'bg-amber-400/20   text-amber-200   border border-amber-400/50',
+  A:        'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40',
+  B:        'bg-cyan-500/20    text-cyan-300    border border-cyan-500/40',
+  C:        'bg-indigo-500/20  text-indigo-300  border border-indigo-500/40',
+  D:        'bg-slate-500/20   text-slate-400   border border-slate-500/40',
+};
+
+export function flawlessRankChipClass(rank: FlawlessRank | null): string {
+  if (!rank) return 'bg-slate-700/40 text-slate-500 border border-slate-700';
+  return FLAWLESS_RANK_STYLES[rank];
+}
+
 // Returns true when `a` is the same OR a strictly better grade than
 // `b` (e.g., bestGrade(SSS, SS) → true). Used by trophy aggregation
 // to pick the highest grade across multiple runs on the same
